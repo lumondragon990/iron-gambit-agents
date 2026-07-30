@@ -19,12 +19,57 @@ app.use(express.json());
 
 const TZ = process.env.TIMEZONE || 'America/Chicago';
 
-/* --- auth for anything that costs money or sends mail --- */
+/* ---------------------------------------------------------------
+   Auth: a short PIN, protected by lockout.
+
+   A 4-digit PIN is only 10,000 combinations, which a script can walk
+   through in seconds. What makes it safe enough here is the lockout
+   below: five wrong tries and that IP is frozen for fifteen minutes,
+   which turns a seconds-long attack into a multi-year one.
+   --------------------------------------------------------------- */
+const PIN = (process.env.ADMIN_PIN || '').trim();
+const MAX_TRIES = 5;
+const LOCK_MS = 15 * 60 * 1000;
+const tries = new Map();               // ip -> { n, until }
+
+function clientIp(req) {
+  return (req.get('x-forwarded-for') || '').split(',')[0].trim() || req.ip || 'unknown';
+}
+
 function admin(req, res, next) {
-  const t = req.get('x-admin-token') || req.query.token;
-  if (!process.env.ADMIN_TOKEN || t !== process.env.ADMIN_TOKEN) {
-    return res.status(401).json({ error: 'bad or missing admin token' });
+  const ip = clientIp(req);
+  const rec = tries.get(ip) || { n: 0, until: 0 };
+
+  if (rec.until > Date.now()) {
+    return res.status(429).json({
+      error: 'too many wrong attempts',
+      retry_in_seconds: Math.ceil((rec.until - Date.now()) / 1000)
+    });
   }
+
+  if (!PIN) {
+    return res.status(503).json({
+      error: 'ADMIN_PIN is not set on the server',
+      fix: 'Add an ADMIN_PIN variable in Railway, then wait for the redeploy.'
+    });
+  }
+
+  const given = String(req.get('x-admin-pin') || req.query.pin || '').trim();
+
+  if (given !== PIN) {
+    rec.n += 1;
+    if (rec.n >= MAX_TRIES) {
+      rec.until = Date.now() + LOCK_MS;
+      rec.n = 0;
+      tries.set(ip, rec);
+      notify('Command — locked out', `Five wrong PIN attempts from ${ip}. Locked for 15 minutes.`).catch(() => {});
+      return res.status(429).json({ error: 'too many wrong attempts', retry_in_seconds: LOCK_MS / 1000 });
+    }
+    tries.set(ip, rec);
+    return res.status(401).json({ error: 'wrong PIN', tries_left: MAX_TRIES - rec.n });
+  }
+
+  tries.delete(ip);
   next();
 }
 
@@ -108,7 +153,15 @@ function firstLine(out) {
   return line.replace(/^[#>*\-\s]+/, '').slice(0, 150);
 }
 
-app.get('/health', (_, res) => res.json({ ok: true, agents: AGENTS.length, tz: TZ }));
+app.get('/health', (_, res) => res.json({
+  ok: true,
+  agents: AGENTS.length,
+  tz: TZ,
+  auth: PIN ? 'PIN configured' : 'NO PIN SET — add ADMIN_PIN in Railway',
+  pin_length: PIN ? PIN.length : 0,
+  supabase: process.env.SUPABASE_URL ? 'configured' : 'not set',
+  email: process.env.RESEND_API_KEY ? 'configured' : 'not set'
+}));
 
 app.get('/agents', (_, res) => res.json(
   AGENTS.map(a => ({
@@ -119,7 +172,7 @@ app.get('/agents', (_, res) => res.json(
 
 app.get('/runs', admin, async (_, res) => res.json(await recentRuns(40)));
 
-/* Manual trigger: POST /run/scout  (header x-admin-token) */
+/* Manual trigger: POST /run/scout  (header x-admin-pin) */
 app.post('/run/:id', admin, async (req, res) => {
   const agent = byId(req.params.id);
   if (!agent) return res.status(404).json({ error: 'unknown agent' });
