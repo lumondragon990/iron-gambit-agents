@@ -3,9 +3,10 @@ import express from 'express';
 import cron from 'node-cron';
 import { AGENTS, byId } from './agents.config.js';
 import { runAgent } from './runner.js';
-import { listOutbox, setOutboxStatus, recentRuns, worldState } from './store.js';
+import { listOutbox, setOutboxStatus, recentRuns, worldState,
+         listEvents, setEventStatus, getRun } from './store.js';
 import { sendOutreach, notify } from './notify.js';
-import { statusPage, adminPage } from './dashboard.js';
+import { statusPage, adminPage, workPage } from './dashboard.js';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -153,6 +154,20 @@ function firstLine(out) {
   return line.replace(/^[#>*\-\s]+/, '').slice(0, 150);
 }
 
+/* Where the work lands: leads, content, outreach. */
+app.get('/work', (_, res) => res.type('html').send(workPage()));
+
+app.get('/leads', admin, async (req, res) => res.json(await listEvents(req.query.status || 'all')));
+app.post('/leads/:id/status', admin, async (req, res) => {
+  const r = await setEventStatus(req.params.id, String(req.body?.status || 'new'));
+  res.json({ ok: !!r, row: r });
+});
+app.get('/runs/:id', admin, async (req, res) => {
+  const r = await getRun(req.params.id);
+  if (!r) return res.status(404).json({ error: 'not found' });
+  res.json(r);
+});
+
 app.get('/health', (_, res) => res.json({
   ok: true,
   agents: AGENTS.length,
@@ -224,7 +239,7 @@ for (const a of AGENTS) {
 
 app.use((req, res) => res.status(404).json({
   error: 'no such route',
-  try: ['/', '/admin', '/health', '/agents']
+  try: ['/', '/admin', '/work', '/city', '/health', '/agents']
 }));
 
 const port = process.env.PORT || 3000;
