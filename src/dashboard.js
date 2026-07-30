@@ -145,10 +145,10 @@ export function workPage() {
     </div>
     <div id="panel" style="display:none">
       <div class="subtabs">
-        <button id="t_leads"   class="on" onclick="tab('leads')">Leads</button>
-        <button id="t_content" onclick="tab('content')">Content</button>
-        <button id="t_reach"   onclick="tab('reach')">Outreach</button>
-        <button id="t_all"     onclick="tab('all')">Everything</button>
+        <button id="t_leads"   class="on" data-tab="leads">Leads</button>
+        <button id="t_content" data-tab="content">Content</button>
+        <button id="t_reach"   data-tab="reach">Outreach</button>
+        <button id="t_all"     data-tab="all">Everything</button>
       </div>
       <div id="body"></div>
     </div>
@@ -234,9 +234,9 @@ async function renderLeads(){
         (r.apply_url?'<a class="pill" style="color:#D8B678;border-color:#9C7C43" target="_blank" href="'+esc(r.apply_url)+'">Open</a>':'')+
       '</div></div>'+
       '<div style="display:flex;flex-direction:column;gap:5px">'+
-        '<button onclick="mark('+r.id+',\'applied\')">Applied</button>'+
-        '<button onclick="mark('+r.id+',\'booked\')">Booked</button>'+
-        '<button class="bad" onclick="mark('+r.id+',\'passed\')">Pass</button>'+
+        '<button data-act="mark" data-id="'+r.id+'" data-st="applied">Applied</button>'+
+        '<button data-act="mark" data-id="'+r.id+'" data-st="booked">Booked</button>'+
+        '<button class="bad" data-act="mark" data-id="'+r.id+'" data-st="passed">Pass</button>'+
       '</div></div></div>';
   }).join('');
 }
@@ -250,8 +250,8 @@ function card(r,folded){
   var id='r'+r.id;
   return '<div class="out"><div class="row"><div class="grow">'+
     '<h3>'+esc(r.agent)+'</h3><div class="tiny">'+when(r.created_at||r.at)+'  ·  '+esc(r.trigger||'')+'</div></div>'+
-    '<button onclick="copyRun('+r.id+')">Copy</button>'+
-    '<button onclick="toggle(\''+id+'\')">Expand</button></div>'+
+    '<button data-act="copy" data-id="'+r.id+'">Copy</button>'+
+    '<button data-act="toggle" data-id="'+id+'">Expand</button></div>'+
     '<pre id="'+id+'" class="'+(folded?'fold':'')+'">'+esc(r.output||r.text||'')+'</pre></div>';
 }
 function toggle(id){ var e=document.getElementById(id); e.classList.toggle('fold'); }
@@ -266,7 +266,7 @@ function renderContent(){
   var rows=RUNS.filter(function(r){ return CONTENT_AGENTS.indexOf(r.agent)>=0; });
   document.getElementById('body').innerHTML = rows.length
     ? rows.map(function(r){return card(r,true);}).join('')
-    : '<div class="empty">No content yet.<br><br>Run <b>Wick</b> for a TikTok post or <b>Ember</b> for the week\'s plan.</div>';
+    : '<div class="empty">No content yet.<br><br>Run <b>Wick</b> for a TikTok post or <b>Ember</b> for the weekly plan.</div>';
 }
 async function renderReach(){
   var b=document.getElementById('body'); b.innerHTML='<div class="tiny">Loading…</div>';
@@ -276,9 +276,9 @@ async function renderReach(){
     return '<div class="out"><div class="row"><div class="grow">'+
       '<h3>'+esc(x.to_name||'Unknown')+'</h3>'+
       '<div class="tiny">'+esc(x.handle||'')+'  ·  '+(x.to_email?esc(x.to_email):'DM only, send by hand')+'</div></div>'+
-      (x.to_email?'<button onclick="send('+x.id+')">Send</button>':'')+
-      '<button class="bad" onclick="rej('+x.id+')">Reject</button></div>'+
-      '<pre>'+esc(x.subject?('Subject: '+x.subject+'\n\n'):'')+esc(x.body)+'</pre></div>';
+      (x.to_email?'<button data-act="send" data-id="'+x.id+'">Send</button>':'')+
+      '<button class="bad" data-act="rej" data-id="'+x.id+'">Reject</button></div>'+
+      '<pre>'+esc(x.subject?('Subject: '+x.subject+String.fromCharCode(10,10)):'')+esc(x.body)+'</pre></div>';
   }).join('');
 }
 async function send(id){ var r=await fetch('/outbox/'+id+'/approve',{method:'POST',headers:h()});
@@ -291,6 +291,20 @@ async function renderAll(){
     ? RUNS.map(function(r){return card(r,true);}).join('')
     : '<div class="empty">Nothing has run yet.</div>';
 }
+/* One listener for the whole page. No inline handlers, nothing to escape. */
+document.addEventListener('click', function(ev){
+  var b = ev.target.closest ? ev.target.closest('button') : null;
+  if(!b) return;
+  if(b.dataset.tab){ tab(b.dataset.tab); return; }
+  var act = b.dataset.act, id = b.dataset.id;
+  if(!act) return;
+  if(act==='mark')   mark(id, b.dataset.st);
+  if(act==='copy')   copyRun(id);
+  if(act==='toggle') toggle(id);
+  if(act==='send')   send(id);
+  if(act==='rej')    rej(id);
+});
+
 boot();
 </script>`, 'work');
 }
@@ -398,7 +412,7 @@ async function loadAgents(){
       '<div class="name">'+esc(x.person||x.name)+' <span class="meta" style="display:inline">— '+esc(x.name)+'</span></div>'+
       '<div class="meta">'+esc(x.role||'')+'</div>'+
       '<div class="meta">'+(x.schedule||'on demand')+(x.search?'  ·  web search':'')+'</div></div>'+
-      '<button onclick="run(this,\\''+x.id+'\\')">Run</button></div>'+
+      '<button data-run="'+x.id+'">Run</button></div>'+
       '<pre id="out_'+x.id+'" style="display:none"></pre></div>';
   }).join('');
 }
@@ -426,7 +440,7 @@ async function loadOutbox(){
       '<div class="meta">'+mail+'</div></div>'+
       (x.to_email?'<button onclick="approve(this,'+x.id+')">Send</button>':'')+
       '<button class="bad" onclick="reject(this,'+x.id+')">Reject</button></div>'+
-      '<pre>'+esc(x.subject?('Subject: '+x.subject+'\\n\\n'):'')+esc(x.body)+'</pre></div>';
+      '<pre>'+esc(x.subject?('Subject: '+x.subject+String.fromCharCode(10,10)):'')+esc(x.body)+'</pre></div>';
   }).join('');
 }
 
