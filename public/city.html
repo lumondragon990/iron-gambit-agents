@@ -115,8 +115,15 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
 
 .gate{position:absolute;inset:0;display:grid;place-items:center;background:rgba(7,10,14,.97);z-index:30;text-align:center}
 .gate.gone{display:none}
-.gate input{background:none;border:1px solid var(--line);color:var(--cream);padding:11px 14px;font:inherit;font-size:14px;width:260px;text-align:center}
-.gate input:focus{outline:none;border-color:var(--gold)}
+.dots{display:flex;gap:13px;justify-content:center;margin:18px 0 22px}
+.dots i{width:13px;height:13px;border-radius:50%;border:1px solid var(--gold-dp);display:block;transition:all .18s}
+.dots i.on{background:var(--gold);border-color:var(--gold);box-shadow:0 0 12px rgba(216,182,120,.75)}
+.pad{display:grid;grid-template-columns:repeat(3,78px);gap:10px;justify-content:center}
+.pad button{font-family:var(--serif);font-size:25px;font-weight:500;height:66px;border:1px solid var(--line);
+color:var(--cream);background:none;transition:all .12s;cursor:pointer}
+.pad button:hover{border-color:var(--gold);color:var(--gold)}
+.pad button:active{background:var(--gold);color:var(--obsidian)}
+.pad button.alt{font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--smoke)}
 .boot{position:absolute;inset:0;display:grid;place-items:center;background:#070A0E;z-index:20;text-align:center;
   transition:opacity .6s}
 .boot.gone{opacity:0;pointer-events:none}
@@ -171,13 +178,9 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
       <div class="gate" id="gate">
         <div>
           <svg viewBox="0 -159 863 863" style="width:64px;height:64px;color:var(--gold)"><use href="#crest"/></svg>
-          <p style="font-family:var(--mono);font-size:10px;letter-spacing:.24em;text-transform:uppercase;color:var(--gold-dp);margin:18px 0 14px">Admin token</p>
-          <input id="tok" type="text" placeholder="paste or type ADMIN_TOKEN" autocomplete="off"
-                 autocapitalize="off" autocorrect="off" spellcheck="false">
-          <div style="margin-top:12px"><button class="chip" id="btnUnlock">Unlock</button>
-          <button class="chip" id="btnPaste">Paste</button></div>
-          <p style="font-family:var(--mono);font-size:9px;letter-spacing:.08em;color:var(--gold-dp);margin-top:14px;line-height:1.8">
-          Can't paste? Use the address bar:<br>/city?token=YOUR_TOKEN</p>
+          <p style="font-family:var(--mono);font-size:10px;letter-spacing:.24em;text-transform:uppercase;color:var(--gold-dp);margin:18px 0 4px">Enter PIN</p>
+          <div class="dots" id="dots"></div>
+          <div class="pad" id="pad"></div>
           <div id="gateErr" style="color:#D98A7A;font-size:12px;margin-top:12px;max-width:300px"></div>
         </div>
       </div>
@@ -1430,8 +1433,9 @@ document.getElementById('btnFit').addEventListener('click',function(){
 
 
 /* ============================================================ LIVE FEED */
-var TOKEN = localStorage.getItem('igt') || '';
+var TOKEN = localStorage.getItem('igpin') || '';
 var LIVE = false, seenRuns = {}, firstPull = true;
+var PINLEN = 4, entry = '', locked = false;
 
 function gateOpen(){ document.getElementById('gate').classList.add('gone'); }
 function gateErr(m){ document.getElementById('gateErr').textContent = m; }
@@ -1439,12 +1443,24 @@ function gateErr(m){ document.getElementById('gateErr').textContent = m; }
 async function pullState(){
   if(!TOKEN) return;
   try{
-    var r = await fetch('/state', { headers: { 'x-admin-token': TOKEN } });
-    if(r.status === 401){ LIVE=false; gateErr('That token does not match ADMIN_TOKEN.'); localStorage.removeItem('igt'); TOKEN=''; document.getElementById('gate').classList.remove('gone'); return; }
+    var r = await fetch('/state', { headers: { 'x-admin-pin': TOKEN } });
+    if(r.status === 503){ gateErr('No PIN set on the server. Add ADMIN_PIN in Railway.'); return; }
+    if(r.status === 429){
+      var jl = await r.json(); locked = true;
+      gateErr('Too many wrong tries. Locked for '+Math.ceil((jl.retry_in_seconds||900)/60)+' minutes.');
+      entry=''; drawDots(); return;
+    }
+    if(r.status === 401){
+      var j4 = await r.json(); LIVE=false;
+      gateErr('Wrong PIN. '+(j4.tries_left!=null? j4.tries_left+' tries left.':''));
+      localStorage.removeItem('igpin'); TOKEN=''; entry=''; drawDots();
+      document.getElementById('gate').classList.remove('gone'); return;
+    }
     if(!r.ok) throw new Error('HTTP '+r.status);
     var s = await r.json();
     applyState(s);
     LIVE = true;
+    localStorage.setItem('igpin', TOKEN);
     document.getElementById('pip').style.background = '#6FBF73';
     document.getElementById('feed').textContent = s.live ? 'live' : 'no database';
     gateOpen();
@@ -1498,33 +1514,52 @@ function sendHome(a){
   a.path = route(a.pos, rec.door); a.pi = 0; a.wait = 30;
 }
 
-document.getElementById('btnPaste').addEventListener('click', async function(){
-  try{
-    var t = await navigator.clipboard.readText();
-    document.getElementById('tok').value = t.trim();
-    document.getElementById('btnUnlock').click();
-  }catch(e){ gateErr('Browser blocked clipboard access. Type it in, or use /city?token=YOUR_TOKEN'); }
-});
-
-document.getElementById('btnUnlock').addEventListener('click', function(){
-  TOKEN = document.getElementById('tok').value.trim().replace(/\s+/g,'');
-  if(!TOKEN){ gateErr('Paste the token first.'); return; }
-  localStorage.setItem('igt', TOKEN);
-  gateErr('checking…');
-  pullState();
-});
-document.getElementById('tok').addEventListener('keydown', function(e){
-  if(e.key==='Enter') document.getElementById('btnUnlock').click();
-});
-
-var _qp = new URLSearchParams(location.search).get('token');
-if(_qp){
-  TOKEN = _qp.trim().replace(/\s+/g,'');
-  localStorage.setItem('igt', TOKEN);
-  history.replaceState({},'',location.pathname);
+function drawDots(){
+  var d=document.getElementById('dots'); d.innerHTML='';
+  for(var i=0;i<PINLEN;i++){
+    var el=document.createElement('i');
+    if(i<entry.length) el.className='on';
+    d.appendChild(el);
+  }
 }
-if(TOKEN){ document.getElementById('tok').value = TOKEN; pullState(); }
-setInterval(pullState, 20000);
+function buildPad(){
+  var p=document.getElementById('pad'); p.innerHTML='';
+  ['1','2','3','4','5','6','7','8','9','clear','0','back'].forEach(function(k){
+    var b=document.createElement('button');
+    if(k==='clear'||k==='back'){ b.className='alt'; b.textContent=(k==='back'?'DEL':'CLR'); }
+    else b.textContent=k;
+    b.addEventListener('click',function(){
+      if(locked) return;
+      if(k==='clear') entry='';
+      else if(k==='back') entry=entry.slice(0,-1);
+      else if(entry.length<PINLEN) entry+=k;
+      drawDots();
+      if(entry.length===PINLEN){ TOKEN=entry; gateErr('checking…'); pullState(); }
+    });
+    p.appendChild(b);
+  });
+  drawDots();
+}
+document.addEventListener('keydown',function(e){
+  if(document.getElementById('gate').classList.contains('gone')||locked) return;
+  if(/^[0-9]$/.test(e.key)&&entry.length<PINLEN){ entry+=e.key; drawDots();
+    if(entry.length===PINLEN){ TOKEN=entry; gateErr('checking…'); pullState(); } }
+  if(e.key==='Backspace'){ entry=entry.slice(0,-1); drawDots(); }
+});
+
+(async function bootGate(){
+  try{
+    var hj = await (await fetch('/health')).json();
+    if(hj.pin_length) PINLEN = hj.pin_length;
+    if(!hj.pin_length){
+      gateErr('No PIN is set on the server. Add an ADMIN_PIN variable in Railway, then reload.');
+      return;
+    }
+  }catch(e){}
+  buildPad();
+  if(TOKEN){ entry = TOKEN; drawDots(); pullState(); }
+})();
+setInterval(function(){ if(TOKEN) pullState(); }, 20000);
 
 buildRoster(); select('content');
 log('Command','the yard is open. waiting on the service.',true);
