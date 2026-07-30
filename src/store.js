@@ -58,3 +58,27 @@ export async function worldState() {
   ]);
   return { live: true, runs: runs || [], counts: { outbox: outbox || 0, events: events || 0 } };
 }
+
+/** Leads found by the Scout, newest and best-fitting first. */
+export async function listEvents(status) {
+  if (!db) return [];
+  let q = db.from('events').select('*').order('fit_score', { ascending: false }).limit(120);
+  if (status && status !== 'all') q = q.eq('status', status);
+  const { data, error } = await q;
+  if (error) { console.error('[store] listEvents', error.message); return []; }
+  return data || [];
+}
+
+export async function setEventStatus(id, status) {
+  if (!db) return null;
+  const { data, error } = await db.from('events').update({ status }).eq('id', id).select().single();
+  if (error) { console.error('[store] setEventStatus', error.message); return null; }
+  return data;
+}
+
+/** Full text of one run, for reading and copying. */
+export async function getRun(id) {
+  if (!db) return null;
+  const { data } = await db.from('agent_runs').select('*').eq('id', id).single();
+  return data || null;
+}
