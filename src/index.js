@@ -7,6 +7,12 @@ import { listOutbox, setOutboxStatus, recentRuns, worldState } from './store.js'
 import { sendOutreach, notify } from './notify.js';
 import { statusPage, adminPage } from './dashboard.js';
 import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+
+/* Resolve from this file, not from wherever the process happened to start. */
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const PUBLIC = path.join(HERE, '..', 'public');
 
 const app = express();
 app.use(express.json());
@@ -33,10 +39,29 @@ app.get('/', (_, res) => res.type('html').send(
 /* Browser dashboard. The page itself is harmless; every call it makes needs the token. */
 app.get('/admin', (_, res) => res.type('html').send(adminPage()));
 
-/* The 3D city. Internal tool — lives here, not on the storefront. */
+/* The 3D yard. Internal tool — lives here, not on the storefront. */
 app.get('/city', async (_, res) => {
-  try { res.type('html').send(await readFile('public/city.html', 'utf8')); }
-  catch { res.status(500).send('city.html missing from public/'); }
+  try {
+    res.type('html').send(await readFile(path.join(PUBLIC, 'city.html'), 'utf8'));
+  } catch (e) {
+    res.status(500).type('html').send(
+      '<body style="background:#0A0908;color:#F2EBDD;font-family:system-ui;padding:40px;line-height:1.7">' +
+      '<h2 style="color:#D8B678">city.html was not found</h2>' +
+      '<p>The service looked in <code style="color:#D8B678">' + PUBLIC + '</code> and found nothing.</p>' +
+      '<p>This almost always means the <code style="color:#D8B678">public/</code> folder did not make it into the ' +
+      'GitHub upload. Browser uploads sometimes flatten or skip folders.</p>' +
+      '<p><b>Fix:</b> in GitHub, click <b>Add file</b> then <b>Create new file</b>, type ' +
+      '<code style="color:#D8B678">public/city.html</code> as the filename (the slash makes the folder), ' +
+      'paste the contents of city.html, and commit.</p>' +
+      '<p><a style="color:#D8B678" href="/">Back to status</a></p></body>'
+    );
+  }
+});
+
+/* favicon for all three pages */
+app.get('/favicon.svg', async (_, res) => {
+  try { res.type('image/svg+xml').send(await readFile(path.join(PUBLIC, 'favicon.svg'), 'utf8')); }
+  catch { res.status(404).end(); }
 });
 
 /* Live state for the city view. */
