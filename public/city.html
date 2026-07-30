@@ -172,8 +172,12 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
         <div>
           <svg viewBox="0 -159 863 863" style="width:64px;height:64px;color:var(--gold)"><use href="#crest"/></svg>
           <p style="font-family:var(--mono);font-size:10px;letter-spacing:.24em;text-transform:uppercase;color:var(--gold-dp);margin:18px 0 14px">Admin token</p>
-          <input id="tok" type="password" placeholder="paste ADMIN_TOKEN" autocomplete="off">
-          <div style="margin-top:12px"><button class="chip" id="btnUnlock">Unlock</button></div>
+          <input id="tok" type="text" placeholder="paste or type ADMIN_TOKEN" autocomplete="off"
+                 autocapitalize="off" autocorrect="off" spellcheck="false">
+          <div style="margin-top:12px"><button class="chip" id="btnUnlock">Unlock</button>
+          <button class="chip" id="btnPaste">Paste</button></div>
+          <p style="font-family:var(--mono);font-size:9px;letter-spacing:.08em;color:var(--gold-dp);margin-top:14px;line-height:1.8">
+          Can't paste? Use the address bar:<br>/city?token=YOUR_TOKEN</p>
           <div id="gateErr" style="color:#D98A7A;font-size:12px;margin-top:12px;max-width:300px"></div>
         </div>
       </div>
@@ -1494,8 +1498,16 @@ function sendHome(a){
   a.path = route(a.pos, rec.door); a.pi = 0; a.wait = 30;
 }
 
+document.getElementById('btnPaste').addEventListener('click', async function(){
+  try{
+    var t = await navigator.clipboard.readText();
+    document.getElementById('tok').value = t.trim();
+    document.getElementById('btnUnlock').click();
+  }catch(e){ gateErr('Browser blocked clipboard access. Type it in, or use /city?token=YOUR_TOKEN'); }
+});
+
 document.getElementById('btnUnlock').addEventListener('click', function(){
-  TOKEN = document.getElementById('tok').value.trim();
+  TOKEN = document.getElementById('tok').value.trim().replace(/\s+/g,'');
   if(!TOKEN){ gateErr('Paste the token first.'); return; }
   localStorage.setItem('igt', TOKEN);
   gateErr('checking…');
@@ -1505,6 +1517,12 @@ document.getElementById('tok').addEventListener('keydown', function(e){
   if(e.key==='Enter') document.getElementById('btnUnlock').click();
 });
 
+var _qp = new URLSearchParams(location.search).get('token');
+if(_qp){
+  TOKEN = _qp.trim().replace(/\s+/g,'');
+  localStorage.setItem('igt', TOKEN);
+  history.replaceState({},'',location.pathname);
+}
 if(TOKEN){ document.getElementById('tok').value = TOKEN; pullState(); }
 setInterval(pullState, 20000);
 
