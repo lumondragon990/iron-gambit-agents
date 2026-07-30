@@ -214,9 +214,9 @@ if(typeof THREE==='undefined'){
 var host=document.getElementById('cv');
 var scene=new THREE.Scene();
 scene.background=new THREE.Color(0x0B1018);
-scene.fog=new THREE.Fog(0x0B1018,420,900);
+scene.fog=new THREE.Fog(0x0B1018,560,1500);
 
-var camera=new THREE.PerspectiveCamera(46,1,0.5,2200);
+var camera=new THREE.PerspectiveCamera(46,1,0.5,3600);
 var renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
 renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
 renderer.shadowMap.enabled=true;
@@ -238,10 +238,36 @@ sun.position.set(200,300,140);
 sun.castShadow=true;
 sun.shadow.mapSize.width=2048; sun.shadow.mapSize.height=2048;
 sun.shadow.camera.near=10; sun.shadow.camera.far=900;
-sun.shadow.camera.left=-340; sun.shadow.camera.right=340;
-sun.shadow.camera.top=340; sun.shadow.camera.bottom=-340;
+sun.shadow.camera.left=-460; sun.shadow.camera.right=460;
+sun.shadow.camera.top=460; sun.shadow.camera.bottom=-460;
 sun.shadow.bias=-0.0008;
 scene.add(sun); scene.add(sun.target);
+
+/* Visible sun disc, its halo, and a moon for the night side. */
+var sunDisc=new THREE.Mesh(new THREE.SphereGeometry(34,24,18),
+  new THREE.MeshBasicMaterial({color:0xFFF6DC,fog:false}));
+var sunGlow=new THREE.Mesh(new THREE.SphereGeometry(95,24,18),
+  new THREE.MeshBasicMaterial({color:0xFFD98A,transparent:true,opacity:.20,
+    blending:THREE.AdditiveBlending,depthWrite:false,fog:false}));
+var sunWide=new THREE.Mesh(new THREE.SphereGeometry(190,20,14),
+  new THREE.MeshBasicMaterial({color:0xFFC46A,transparent:true,opacity:.07,
+    blending:THREE.AdditiveBlending,depthWrite:false,fog:false}));
+var moonDisc=new THREE.Mesh(new THREE.SphereGeometry(22,20,16),
+  new THREE.MeshBasicMaterial({color:0xDCE6F5,fog:false}));
+var moonGlow=new THREE.Mesh(new THREE.SphereGeometry(58,20,16),
+  new THREE.MeshBasicMaterial({color:0xAFC4E8,transparent:true,opacity:.15,
+    blending:THREE.AdditiveBlending,depthWrite:false,fog:false}));
+scene.add(sunDisc,sunGlow,sunWide,moonDisc,moonGlow);
+
+/* Stars, only visible after dark. */
+var starGeo=new THREE.BufferGeometry(), starPos=[];
+for(var si=0;si<420;si++){
+  var th0=Math.random()*Math.PI*2, ph0=Math.acos(Math.random()*0.85+0.05), R0=2000;
+  starPos.push(Math.sin(ph0)*Math.cos(th0)*R0, Math.cos(ph0)*R0, Math.sin(ph0)*Math.sin(th0)*R0);
+}
+starGeo.setAttribute('position',new THREE.Float32BufferAttribute(starPos,3));
+var starMat=new THREE.PointsMaterial({color:0xEAF0FF,size:5,sizeAttenuation:false,transparent:true,opacity:0,fog:false});
+scene.add(new THREE.Points(starGeo,starMat));
 
 /* ============================================================ MATERIAL HELPERS */
 var MAT={};
@@ -296,7 +322,7 @@ function facade(base,frame,cols,rows,lit){
 var emissiveWindows=[], lampLights=[], neonMats=[];
 
 /* ============================================================ CITY LAYOUT */
-var BLOCK=76, ROAD=22, GRID=5;
+var BLOCK=76, ROAD=22, GRID=7;
 var SPAN=GRID*BLOCK+(GRID+1)*ROAD;
 var ORIGIN=-SPAN/2;
 function bx0(i){ return ORIGIN+ROAD+i*(BLOCK+ROAD); }          /* block min edge */
@@ -304,7 +330,7 @@ function bc(i){ return bx0(i)+BLOCK/2; }                       /* block center *
 function roadC(i){ return ORIGIN+ROAD/2+i*(BLOCK+ROAD); }      /* road centreline, i=0..GRID */
 
 /* ground */
-var ground=new THREE.Mesh(new THREE.PlaneGeometry(1600,1600),mat(0x14180F,1,0));
+var ground=new THREE.Mesh(new THREE.PlaneGeometry(2600,2600),mat(0x14180F,1,0));
 ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground);
 
 /* roads — one strip mesh each, dashes come from a repeating texture */
@@ -345,17 +371,17 @@ for(var i2=0;i2<GRID;i2++) for(var j2=0;j2<GRID;j2++){
 var ZONES={
   iron:{name:'The Iron House',blk:[0,0],color:0x7A2731,
     blurb:'Twelve thousand square feet of platforms, racks and mirrors. Every campaign frame gets shot here.'},
-  office:{name:'The Office',blk:[2,0],color:0x3A3630,
+  office:{name:'The Office',blk:[3,0],color:0x3A3630,
     blurb:'Strategy, copy and launch planning. The war room where drops get built and post-mortems written.'},
-  press:{name:'The Press',blk:[4,0],color:0x2E3A44,
+  press:{name:'The Press',blk:[6,0],color:0x2E3A44,
     blurb:'Screen printing, foil transfer, embroidery. Every Royal Series piece is finished on this floor.'},
-  row:{name:'The Row',blk:[0,2],color:0x8D7A60,
+  row:{name:'The Row',blk:[0,3],color:0x8D7A60,
     blurb:'Where the customers actually live. Neighbourhood scouting, stalls, word of mouth.'},
-  hall:{name:'Meeting Hall',blk:[2,2],color:0x6B5320,
+  hall:{name:'Meeting Hall',blk:[3,3],color:0x6B5320,
     blurb:'The tribe convenes here. Every agent reports in and every handoff happens on this floor.'},
-  market:{name:'The Market',blk:[4,2],color:0xB9A488,
+  market:{name:'The Market',blk:[6,3],color:0xB9A488,
     blurb:'Blanks, boxes, foil and tape in. Packed orders out. Nothing ships that has not been through here.'},
-  whiskey:{name:'Whiskey River',blk:[2,4],color:0x4A1620,
+  whiskey:{name:'Whiskey River',blk:[3,6],color:0x4A1620,
     blurb:'The nightclub. Creators, photographers and gym owners all end up here. Deals get made after midnight.'}
 };
 
@@ -536,9 +562,74 @@ var HUB=new THREE.Vector3(0,0,0); var hallOrb=null, hallHalo=null;
   walls.forEach(function(m){ m.userData.zone='hall'; pickables.push(m); });
 })();
 
+/* ============================================================ PARKS */
+var PARKS=[[0,6],[6,6],[1,1],[5,4]];
+var grassM=mat(0x24401F,.98,0), pathM=mat(0x50493C,.95,0), waterM=null;
+function bench(x,z,ry){
+  var g=new THREE.Group(); g.position.set(x,0,z); if(ry) g.rotation.y=ry; scene.add(g);
+  var wood=mat(0x6B4A2C,.9,.02), iron=mat(0x2A2C2E,.7,.35);
+  box(11,.7,3.6,wood,0,4.2,0,0,g);
+  box(11,3.2,.7,wood,0,6,-1.6,0,g);
+  box(.7,4,.7,iron,-4.6,2,0,0,g); box(.7,4,.7,iron,4.6,2,0,0,g);
+}
+function park(bi,bj){
+  var cx=bc(bi), cz=bc(bj);
+  var g=new THREE.Group(); g.position.set(cx,0,cz); scene.add(g);
+  /* lawn */
+  var lawn=new THREE.Mesh(new THREE.PlaneGeometry(BLOCK+4,BLOCK+4),grassM);
+  lawn.rotation.x=-Math.PI/2; lawn.position.y=.78; lawn.receiveShadow=true; g.add(lawn);
+  /* crossing paths */
+  var p1=new THREE.Mesh(new THREE.PlaneGeometry(BLOCK+4,9),pathM);
+  p1.rotation.x=-Math.PI/2; p1.position.y=.86; p1.receiveShadow=true; g.add(p1);
+  var p2=new THREE.Mesh(new THREE.PlaneGeometry(9,BLOCK+4),pathM);
+  p2.rotation.x=-Math.PI/2; p2.position.y=.86; p2.receiveShadow=true; g.add(p2);
+  /* pond */
+  var pond=new THREE.Mesh(new THREE.CircleGeometry(15,32),
+    new THREE.MeshStandardMaterial({color:0x1E4C5C,roughness:.08,metalness:.7,
+      emissive:0x0C2C3A,emissiveIntensity:.3}));
+  pond.rotation.x=-Math.PI/2; pond.position.set(-19,.92,19); g.add(pond);
+  var rim=new THREE.Mesh(new THREE.TorusGeometry(15.4,1.1,8,32),mat(0x53514A,.9,.05));
+  rim.rotation.x=-Math.PI/2; rim.position.set(-19,1,19); rim.receiveShadow=true; g.add(rim);
+  /* benches around the crossing */
+  bench(cx+13,cz-7,0); bench(cx-13,cz-7,Math.PI);
+  bench(cx+13,cz+9,0); bench(cx-13,cz+9,Math.PI);
+  /* trees, dense */
+  for(var t=0;t<11;t++){
+    var an=t/11*Math.PI*2, rr=25+((t*7)%9);
+    tree(cx+Math.cos(an)*rr, cz+Math.sin(an)*rr, 1.0+((t%3)*0.18));
+  }
+  /* half-court */
+  var court=new THREE.Mesh(new THREE.PlaneGeometry(24,17),mat(0x5A4034,.95,0));
+  court.rotation.x=-Math.PI/2; court.position.set(19,.9,-18); court.receiveShadow=true; g.add(court);
+  cyl(.5,.5,14,8,mat(0x35393C,.6,.4),19,7,-25,g);
+  box(6,.4,.5,mat(0xE8E4DA,.7,.05),19,13.4,-25.6,0,g);
+  var hoop=new THREE.Mesh(new THREE.TorusGeometry(2.1,.28,6,16),mat(0xC44E28,.6,.3));
+  hoop.rotation.x=Math.PI/2; hoop.position.set(19,12.4,-23.6); g.add(hoop);
+  /* park lamps */
+  lamp(cx-24,cz-24); lamp(cx+24,cz+24);
+}
+PARKS.forEach(function(p){ park(p[0],p[1]); });
+
+/* park-goers: always outdoors, always visible */
+var PARKPPL=[];
+PARKS.forEach(function(pk,pi2){
+  var cx=bc(pk[0]), cz=bc(pk[1]);
+  [[13,-7,0,'sit'],[-13,-7,Math.PI,'sit'],[13,9,0,'sit'],[-6,26,Math.PI*0.4,'talk'],[3,26,-Math.PI*0.6,'talk']]
+  .forEach(function(q,qi){
+    var i=pi2*5+qi;
+    var pp=person({top:[0x5E1D25,0xB9A488,0x2E3A44,0x6B5B45,0xF2EBDD][i%5],
+      pants:(i%2?0x2A2622:0x3E3830),hair:[0x1E1712,0x3B2A1C,0x4A3520][i%3],
+      skin:SKIN[i%6],longHair:(i%2===0)});
+    pp.g.position.set(cx+q[0], q[3]==='sit'?4.6:0, cz+q[1]);
+    pp.g.rotation.y=q[2];
+    PARKPPL.push({p:pp,pose:q[3],ph:Math.random()*6,y:q[3]==='sit'?4.6:0});
+  });
+});
+
 /* FILLER CITY — generic towers in every remaining block */
 var used={};
 Object.keys(ZONES).forEach(function(k){ used[ZONES[k].blk[0]+','+ZONES[k].blk[1]]=1; });
+PARKS.forEach(function(p){ used[p[0]+','+p[1]]=1; });
 var fillCols=[0x33302B,0x2C3238,0x3A342C,0x2A2E33,0x38322A,0x30343A];
 for(var fi=0;fi<GRID;fi++) for(var fj=0;fj<GRID;fj++){
   if(used[fi+','+fj]) continue;
@@ -592,7 +683,8 @@ for(var li=0;li<=GRID;li++) for(var lj=0;lj<GRID;lj++){
 }
 /* trees along sidewalks of every block */
 for(var ti=0;ti<GRID;ti++) for(var tj=0;tj<GRID;tj++){
-  if(ti===2&&tj===2) continue;
+  if(ti===3&&tj===3) continue;
+  if(PARKS.some(function(p){ return p[0]===ti&&p[1]===tj; })) continue;
   for(var tk=-1;tk<=1;tk+=2){
     tree(bc(ti)+tk*(BLOCK/2+2), bc(tj)-20, .9);
     tree(bc(ti)-20, bc(tj)+tk*(BLOCK/2+2), .9);
@@ -601,7 +693,7 @@ for(var ti=0;ti<GRID;ti++) for(var tj=0;tj<GRID;tj++){
 /* ring of trees around the Meeting Hall */
 for(var pt=0;pt<10;pt++){
   var ang=pt/10*Math.PI*2;
-  tree(bc(2)+Math.cos(ang)*32, bc(2)+Math.sin(ang)*32, 1.05);
+  tree(bc(3)+Math.cos(ang)*32, bc(3)+Math.sin(ang)*32, 1.05);
 }
 
 /* cars */
@@ -635,6 +727,25 @@ for(var ci=0;ci<10;ci++){
 });
 
 /* ============================================================ INTERIORS (lazy) */
+/* ---- residents: static staff who make a room look worked-in ---- */
+var RESIDENTS=[];
+var RTOPS=[0x5E1D25,0xB9A488,0x2E3A44,0x3A3630,0x6B5B45,0xF2EBDD,0x4A1620,0x8D7A60,0x2A2E33,0x7A4A2C];
+var RHAIR=[0x1E1712,0x3B2A1C,0x141010,0x4A3520,0x2B1D14,0x6B6B6B];
+var _rn=0;
+function resident(rec,pose,lx,ly,lz,ry,opt){
+  opt=opt||{};
+  var i=_rn++;
+  var p=person({top:RTOPS[i%RTOPS.length],pants:(i%2?0x2A2622:0x3E3830),
+    hair:RHAIR[i%RHAIR.length],skin:SKIN[i%SKIN.length],
+    cap:opt.cap,beard:(i%5===0),longHair:(i%3===0)});
+  p.g.position.set(rec.cx+lx, ly, rec.cz+lz);
+  p.g.rotation.y=ry||0;
+  p.g.visible=false;
+  RESIDENTS.push({p:p,pose:pose,zone:rec.key,ph:Math.random()*6,
+    wander:opt.wander?{x:rec.cx+lx,z:rec.cz+lz,r:opt.wander}:null});
+  return p;
+}
+
 function roomSign(g,text,sub,x,y,z,color,ry){
   var c=document.createElement('canvas'); c.width=1024; c.height=256;
   var k=c.getContext('2d');
@@ -658,6 +769,35 @@ function floorZone(g,w,d,x,z,color){
   var m=new THREE.MeshStandardMaterial({color:color,roughness:.9,emissive:color,emissiveIntensity:.10});
   var f=new THREE.Mesh(new THREE.PlaneGeometry(w,d),m);
   f.rotation.x=-Math.PI/2; f.position.set(x,.62,z); f.receiveShadow=true; g.add(f);
+}
+function deskProps(g,x,y,z,ry){
+  var lampArm=mat(0x2E2E30,.6,.5);
+  cyl(1.4,1.6,.4,10,lampArm,x+4.2,y+.4,z+1.2,g);
+  cyl(.22,.22,4,6,lampArm,x+4.2,y+2.4,z+1.2,g);
+  var shade=new THREE.Mesh(new THREE.ConeGeometry(1.5,1.8,10,1,true),
+    new THREE.MeshStandardMaterial({color:0xD8B678,emissive:0xFFE0A0,emissiveIntensity:.9,side:THREE.DoubleSide}));
+  shade.position.set(x+4.2,y+4.6,z+1.2); shade.rotation.x=Math.PI; g.add(shade);
+  /* mug */
+  cyl(.55,.5,1.3,10,mat(0xF2EBDD,.6,.05),x-3.4,y+.9,z+1.4,g);
+  /* loose paper */
+  box(2.4,.06,1.8,mat(0xE8E1D2,.9,0),x-1.6,y+.3,z+1.6,0.3,g,true);
+  box(2.4,.06,1.8,mat(0xE8E1D2,.9,0),x-1.1,y+.36,z+1.9,-0.2,g,true);
+  /* little plant */
+  cyl(.7,.6,1.2,8,mat(0x8A5A3C,.9,0),x+2.6,y+.85,z-1.6,g);
+  var leaf=new THREE.Mesh(new THREE.SphereGeometry(1.2,8,6),mat(0x2E4527,.95,0));
+  leaf.position.set(x+2.6,y+2,z-1.6); g.add(leaf);
+}
+function frames(g,y,z,n,ry){
+  for(var i=0;i<n;i++){
+    var fx=(i-(n-1)/2)*9;
+    box(6,4.4,.4,mat(0x7A5C34,.7,.15),fx,y,z,ry||0,g,true);
+    box(5,3.5,.5,mat([0x3A4A55,0x4A3540,0x35452F][i%3],.8,.05),fx,y,z+(ry?0:.15),ry||0,g,true);
+  }
+}
+function rug(g,w,d,x,z,color){
+  var m=new THREE.MeshStandardMaterial({color:color,roughness:.98});
+  var r=new THREE.Mesh(new THREE.PlaneGeometry(w,d),m);
+  r.rotation.x=-Math.PI/2; r.position.set(x,.66,z); r.receiveShadow=true; g.add(r);
 }
 function fitFloor(rec,floorCol){
   var g=new THREE.Group(); g.position.set(rec.cx,0,rec.cz);
@@ -695,6 +835,8 @@ function buildInterior(key){
       cyl(1,1,.9,10,plateM,1.3,lvl,dz,drg).rotation.z=Math.PI/2;
       var hb=cyl(.28,.28,2.6,6,barM,0,lvl,dz,drg); hb.rotation.z=Math.PI/2;
     }
+    rug(g,18,12,0,d/2-24,0x33232A);
+    frames(g,16,-d/2+1.9,2,0);
     /* mats + plate tree */
     for(var mi=0;mi<3;mi++) box(10,.3,10,mat(0x1E2A22,.98,0),-w/2+14+mi*13,.62,d/2-12,0,g,true);
     box(2,12,2,mat(0x44484C,.6,.4),-w/2+8,6,d/2-8,0,g);
@@ -704,6 +846,12 @@ function buildInterior(key){
     var lm=new THREE.MeshStandardMaterial({color:0xFFF4DC,emissive:0xFFE9B8,emissiveIntensity:1.4});
     for(var gi=0;gi<3;gi++) box(w-18,.6,2.4,lm,0,rec.h-3,-14+gi*14,0,g,true);
     var fill=new THREE.PointLight(0xFFE2B0,.9,120,2); fill.position.set(0,rec.h-6,0); g.add(fill);
+    /* two lifting, one spotting, one on the bench */
+    resident(rec,'lift',-w/2+12,.8,-7.6,0,{cap:0xD8B678});
+    resident(rec,'lift',-w/2+12+((w-24)/3)*2,.8,-7.6,0);
+    resident(rec,'talk',-w/2+12+((w-24)/3),.8,-2,Math.PI);
+    resident(rec,'sit', -w/2+12+((w-24)/3),4.6,7,0);
+    resident(rec,'lean', w/2-10,.8,16,-Math.PI/2);
   }
   else if(key==='office'){
     g=fitFloor(rec,0x2A2724);
@@ -716,6 +864,7 @@ function buildInterior(key){
       box(.8,7,.8,mat(0x3A3A3C,.7,.3),dx2+5,3.5,dz2,0,g);
       box(5,3.2,.4,scrM,dx2,9.4,dz2-2,0,g);
       box(1.6,1.4,1.2,mat(0x2A2A2C,.8,.2),dx2,8,dz2-2,0,g);
+      deskProps(g,dx2,7.4,dz2,0);
       box(4,.6,4,chairM,dx2,5,dz2+6,0,g);
       box(4,5,.7,chairM,dx2,7.6,dz2+7.8,0,g);
       cyl(.4,.4,4.6,8,mat(0x1A1A1C,.7,.3),dx2,2.6,dz2+6,g);
@@ -727,6 +876,8 @@ function buildInterior(key){
     cyl(.9,1.6,7,10,mat(0x2A2A2C,.6,.4),0,3.5,d/2-14,g);
     var wbM=new THREE.MeshStandardMaterial({color:0xE8E4DA,roughness:.35,emissive:0xE8E4DA,emissiveIntensity:.12});
     box(22,11,.5,wbM,0,10,-d/2+1.6,0,g);
+    rug(g,26,18,0,d/2-14,0x4A2A2E);
+    frames(g,14,-d/2+1.9,3,0);
     /* plants + shelving */
     for(var pq=0;pq<3;pq++){
       var pxp=-w/2+7+pq*((w-14)/2);
@@ -736,6 +887,14 @@ function buildInterior(key){
     }
     var lm2=new THREE.MeshStandardMaterial({color:0xFFF6E4,emissive:0xFFEFD4,emissiveIntensity:1.2});
     for(var lq=0;lq<2;lq++) box(w-16,.5,2,lm2,0,rec.h-4,-10+lq*20,0,g,true);
+    /* four at desks, one at the whiteboard, two talking by the table */
+    for(var rq=0;rq<4;rq++){
+      var rx2=-w/2+11+(rq%3)*((w-22)/2), rz2=-d/2+13+Math.floor(rq/3)*18;
+      resident(rec,'sit',rx2,4.6,rz2+6,Math.PI);
+    }
+    resident(rec,'talk',-6,.8,-d/2+6,0);
+    resident(rec,'talk',5,.8,d/2-19,Math.PI*0.85);
+    resident(rec,'talk',-4,.8,d/2-20,-Math.PI*0.15);
   }
   else if(key==='press'){
     g=fitFloor(rec,0x24282C);
@@ -767,6 +926,9 @@ function buildInterior(key){
       box(5,4,5,mat(0x8A7654,.95,0),-w/2+8+(bq%4)*6,2.4+Math.floor(bq/4)*4,d/2-8,0,g);
     var lm3=new THREE.MeshStandardMaterial({color:0xE4F0FF,emissive:0xCFE4F5,emissiveIntensity:1.3});
     box(w-14,.5,2,lm3,0,rec.h-4,0,0,g,true);
+    resident(rec,'talk',-12,.8,9,0,{cap:0x2E3A44});
+    resident(rec,'lean',8,.8,-2,-Math.PI/2);
+    resident(rec,'idle',-w/2+10,.8,d/2-9,Math.PI/4,{wander:6});
   }
   else if(key==='market'){
     g=fitFloor(rec,0x2E2C26);
@@ -788,11 +950,15 @@ function buildInterior(key){
     roomSign(g,'The Market','Supply and fulfilment',0,19,-d/2+2.2,0x6FE3A0);
     /* packing table + pallets */
     box(16,1,8,mat(0x6B5B45,.85,.03),-w/2+14,7,d/2-10,0,g);
+    deskProps(g,-w/2+14,7.5,d/2-10,0);
     box(1,7,1,shelfM,-w/2+7,3.5,d/2-10,0,g); box(1,7,1,shelfM,-w/2+21,3.5,d/2-10,0,g);
     for(var pq2=0;pq2<6;pq2++)
       box(6,4.5,6,mat(0x8A7654,.95,0),w/2-14+(pq2%2)*7,2.6+Math.floor(pq2/2)*4.5,d/2-10,0,g);
     var lm4=new THREE.MeshStandardMaterial({color:0xFFF3DC,emissive:0xFFE9BC,emissiveIntensity:1.1});
     box(w-14,.5,2,lm4,0,rec.h-4,-6,0,g,true);
+    resident(rec,'idle',-w/2+14,.8,d/2-15,0,{wander:7});
+    resident(rec,'lean',6,.8,-d/2+16,Math.PI);
+    resident(rec,'talk',w/2-16,.8,d/2-16,-Math.PI/2);
   }
   else if(key==='whiskey'){
     g=fitFloor(rec,0x191114);
@@ -835,6 +1001,13 @@ function buildInterior(key){
     box(13,.7,4,djM,0,7.6,-d/2+7,0,g);
     neonMats.push({m:djM,base:1.1,gain:.6});
     /* moving colour lights */
+    /* three at the bar, two on the floor, one in a booth */
+    resident(rec,'sit',-13+5.2,4.4,d/2-15,0);
+    resident(rec,'sit',-13+5.2*3,4.4,d/2-15,0);
+    resident(rec,'lean',-13+5.2*5,.8,d/2-13,0,{longHair:true});
+    resident(rec,'talk',-6,.8,-2,Math.PI*0.3);
+    resident(rec,'talk',2,.8,2,-Math.PI*0.7);
+    resident(rec,'sit',-w/2+11,4.6,-d/2+12,Math.PI/2);
     var pl3=new THREE.PointLight(0xFF4E7A,1.4,60,2); pl3.position.set(0,rec.h-6,0); g.add(pl3);
     var pl4=new THREE.PointLight(0x4E9BFF,1.2,60,2); pl4.position.set(10,rec.h-6,8); g.add(pl4);
     g.userData.lights=[pl3,pl4];
@@ -861,6 +1034,11 @@ function buildInterior(key){
     }
     var lmH=new THREE.MeshStandardMaterial({color:0xFFF0D0,emissive:0xF0DAA8,emissiveIntensity:1.4});
     cyl(6,6,.5,20,lmH,0,22,0,g);
+    for(var hq=0;hq<4;hq++){
+      var ah=hq/7*Math.PI*2+0.9, rrh=15.5;
+      resident(rec,'sit',Math.cos(ah)*rrh,4.9,Math.sin(ah)*rrh,-ah+Math.PI/2+Math.PI);
+    }
+    resident(rec,'talk',0,.8,-12,0);
     var fillH=new THREE.PointLight(0xFFE2B0,1.0,90,2); fillH.position.set(0,20,0); g.add(fillH);
   }
   rec.interior=g;
@@ -873,31 +1051,110 @@ function hexs(c){ return '#'+c.toString(16).padStart(6,'0'); }
 var SKIN=[0xC98A5E,0xE0AE84,0x8E5A38,0xB4784E,0xD69C72,0x6F4326];
 function person(o){
   var g=new THREE.Group();
-  var topM=mat(o.top,.85,.02), pantM=mat(o.pants,.9,.02), skinM=mat(o.skin,.75,0), hairM=mat(o.hair,.95,0);
-  var hips=new THREE.Group(); hips.position.y=0; g.add(hips);
-  var l1=new THREE.Group(), l2=new THREE.Group();
-  l1.position.set(-.75,4.2,0); l2.position.set(.75,4.2,0); hips.add(l1); hips.add(l2);
-  box(1.3,4.4,1.3,pantM,0,-2.2,0,0,l1); box(1.3,4.4,1.3,pantM,0,-2.2,0,0,l2);
-  box(1.5,.6,2.4,mat(0x1B1815,.9,0),0,-4.6,.4,0,l1);
-  box(1.5,.6,2.4,mat(0x1B1815,.9,0),0,-4.6,.4,0,l2);
-  var torso=box(3.4,4.6,2.1,topM,0,6.6,0,0,g);
-  box(3.7,1,2.4,mat(o.top,.9,.02),0,8.6,0,0,g);
-  var a1=new THREE.Group(), a2=new THREE.Group();
-  a1.position.set(-2.1,8.4,0); a2.position.set(2.1,8.4,0); g.add(a1); g.add(a2);
-  box(1,4,1,topM,0,-2,0,0,a1); box(1,4,1,topM,0,-2,0,0,a2);
-  box(.9,1.1,.9,skinM,0,-4.4,0,0,a1); box(.9,1.1,.9,skinM,0,-4.4,0,0,a2);
-  box(1.2,1.2,1.2,skinM,0,9.5,0,0,g);
-  var head=new THREE.Mesh(new THREE.SphereGeometry(1.5,12,10),skinM);
-  head.position.y=11; head.castShadow=true; g.add(head);
-  var hair=new THREE.Mesh(new THREE.SphereGeometry(1.56,12,8,0,Math.PI*2,0,Math.PI*.6),hairM);
-  hair.position.y=11.1; g.add(hair);
-  if(o.cap){
-    var cap=new THREE.Mesh(new THREE.SphereGeometry(1.62,12,8,0,Math.PI*2,0,Math.PI*.55),mat(o.cap,.85,.02));
-    cap.position.y=11.2; g.add(cap);
-    box(2.4,.28,1.5,mat(o.cap,.85,.02),0,10.9,-1.5,0,g,true);
+  var topM=mat(o.top,.85,.02), pantM=mat(o.pants,.9,.02),
+      skinM=mat(o.skin,.75,0), hairM=mat(o.hair,.95,0), shoeM=mat(0x1B1815,.9,0);
+
+  /* legs: hip -> thigh -> knee -> shin -> foot, so they can actually sit */
+  function leg(side){
+    var hip=new THREE.Group(); hip.position.set(side*0.78,5.2,0); g.add(hip);
+    box(1.35,2.6,1.35,pantM,0,-1.3,0,0,hip);
+    var knee=new THREE.Group(); knee.position.y=-2.6; hip.add(knee);
+    box(1.25,2.8,1.25,pantM,0,-1.4,0,0,knee);
+    box(1.5,.7,2.6,shoeM,0,-2.9,.5,0,knee);
+    return {hip:hip,knee:knee};
   }
+  var L=leg(-1), R=leg(1);
+
+  var torso=box(3.5,4.8,2.2,topM,0,7.5,0,0,g);
+  box(3.9,1.1,2.5,mat(o.top,.9,.02),0,9.7,0,0,g);       /* shoulders */
+  box(1.5,1.2,1.5,skinM,0,10.5,0,0,g);                   /* neck */
+
+  function arm(side){
+    var sh=new THREE.Group(); sh.position.set(side*2.2,9.4,0); g.add(sh);
+    box(1.05,2.6,1.05,topM,0,-1.3,0,0,sh);
+    var el=new THREE.Group(); el.position.y=-2.6; sh.add(el);
+    box(.95,2.4,.95,topM,0,-1.2,0,0,el);
+    box(.95,1.1,.95,skinM,0,-2.6,0,0,el);
+    return {sh:sh,el:el};
+  }
+  var AL=arm(-1), AR=arm(1);
+
+  var head=new THREE.Mesh(new THREE.SphereGeometry(1.55,14,11),skinM);
+  head.position.y=12.1; head.castShadow=true; g.add(head);
+  var hair=new THREE.Mesh(new THREE.SphereGeometry(1.62,14,10,0,Math.PI*2,0,Math.PI*(o.longHair?0.95:0.62)),hairM);
+  hair.position.y=12.2; g.add(hair);
+  if(o.longHair) box(2.6,2.6,.9,hairM,0,10.9,-1.1,0,g,true);
+  if(o.cap){
+    var cap=new THREE.Mesh(new THREE.SphereGeometry(1.7,14,10,0,Math.PI*2,0,Math.PI*.55),mat(o.cap,.85,.02));
+    cap.position.y=12.3; g.add(cap);
+    box(2.5,.3,1.6,mat(o.cap,.85,.02),0,11.9,-1.6,0,g,true);
+  }
+  if(o.beard) box(2.2,1.1,1.4,hairM,0,11.1,.5,0,g,true);
+
   scene.add(g);
-  return {g:g,l1:l1,l2:l2,a1:a1,a2:a2,torso:torso};
+  return {g:g,body:g,L:L,R:R,AL:AL,AR:AR,torso:torso,head:head,pose:'idle',ph:Math.random()*6};
+}
+
+/* ---- poses. This is what makes the place feel populated. ---- */
+function setPose(p,pose,ph,face){
+  p.pose=pose;
+  var s;
+  switch(pose){
+    case 'walk':
+      s=Math.sin(ph*8)*0.72;
+      p.L.hip.rotation.x=s;              p.R.hip.rotation.x=-s;
+      p.L.knee.rotation.x=-Math.max(0,s)*0.85;
+      p.R.knee.rotation.x=-Math.max(0,-s)*0.85;
+      p.AL.sh.rotation.x=-s*0.6;         p.AR.sh.rotation.x=s*0.6;
+      p.AL.el.rotation.x=-0.25;          p.AR.el.rotation.x=-0.25;
+      p.g.position.y=Math.abs(Math.sin(ph*8))*0.34;
+      break;
+    case 'sit':
+      p.L.hip.rotation.x=-1.48;          p.R.hip.rotation.x=-1.48;
+      p.L.knee.rotation.x=1.42;          p.R.knee.rotation.x=1.42;
+      /* hands forward onto the desk, with a little typing motion */
+      var t=Math.sin(ph*9)*0.09;
+      p.AL.sh.rotation.x=-0.95+t;        p.AR.sh.rotation.x=-0.95-t;
+      p.AL.el.rotation.x=-0.75;          p.AR.el.rotation.x=-0.75;
+      p.g.position.y=0;
+      p.torso.rotation.x=0.09;
+      break;
+    case 'talk':
+      var w=Math.sin(ph*2.4);
+      p.L.hip.rotation.x=0.05;           p.R.hip.rotation.x=-0.05;
+      p.L.knee.rotation.x=0;             p.R.knee.rotation.x=0;
+      p.AR.sh.rotation.x=-0.55-Math.abs(w)*0.5;
+      p.AR.el.rotation.x=-1.1;
+      p.AL.sh.rotation.x=-0.12;          p.AL.el.rotation.x=-0.3;
+      p.g.position.y=0;
+      p.g.rotation.z=w*0.02;
+      break;
+    case 'lift':
+      var l=(Math.sin(ph*1.7)+1)/2;                       /* 0..1 rep */
+      p.L.hip.rotation.x=l*0.7;          p.R.hip.rotation.x=l*0.7;
+      p.L.knee.rotation.x=-l*1.25;       p.R.knee.rotation.x=-l*1.25;
+      p.AL.sh.rotation.x=-0.3-l*0.5;     p.AR.sh.rotation.x=-0.3-l*0.5;
+      p.AL.el.rotation.x=-0.35;          p.AR.el.rotation.x=-0.35;
+      p.g.position.y=-l*1.9;
+      p.torso.rotation.x=l*0.28;
+      break;
+    case 'lean':
+      p.L.hip.rotation.x=0.1;            p.R.hip.rotation.x=-0.28;
+      p.L.knee.rotation.x=-0.1;          p.R.knee.rotation.x=-0.2;
+      p.AL.sh.rotation.x=-0.1;           p.AR.sh.rotation.x=0.1;
+      p.AL.el.rotation.x=-0.9;           p.AR.el.rotation.x=-0.2;
+      p.g.position.y=0; p.g.rotation.z=0.05;
+      break;
+    default: /* idle */
+      var b=Math.sin(ph*1.5);
+      p.L.hip.rotation.x*=0.85;          p.R.hip.rotation.x*=0.85;
+      p.L.knee.rotation.x*=0.85;         p.R.knee.rotation.x*=0.85;
+      p.AL.sh.rotation.x=-0.05+b*0.04;   p.AR.sh.rotation.x=-0.05-b*0.04;
+      p.AL.el.rotation.x=-0.18;          p.AR.el.rotation.x=-0.18;
+      p.g.position.y=b*0.12;
+      p.torso.rotation.x=0;
+  }
+  if(face!==undefined) p.g.rotation.y=face;
 }
 
 var AGENTS=[
@@ -976,7 +1233,7 @@ AGENTS.forEach(function(a){
 /* NPCs */
 var NPCS=[];
 var NTOPS=[0x5E1D25,0xB9A488,0x2E3A44,0x3A3630,0x6B5B45,0xF2EBDD,0x4A1620,0x8D7A60];
-for(var ni=0;ni<16;ni++){
+for(var ni=0;ni<26;ni++){
   var np=person({top:NTOPS[ni%8],pants:ni%2?0x2A2622:0x3E3830,hair:0x1E1712,skin:SKIN[ni%6]});
   var st=new THREE.Vector3(roadC(ni%(GRID+1))+ (ni%2?4:-4),0,-SPAN/2+Math.random()*SPAN);
   np.g.position.copy(st);
@@ -991,17 +1248,17 @@ NPCS.forEach(npcTarget);
 
 /* ============================================================ CAMERA CONTROLS */
 var target=new THREE.Vector3(0,10,0);
-var sph={th:Math.PI*0.25, ph:Math.PI*0.32, r:430};
+var sph={th:Math.PI*0.25, ph:Math.PI*0.33, r:620};
 function updateCam(){
   sph.ph=Math.max(.12,Math.min(Math.PI*.487,sph.ph));
-  sph.r=Math.max(26,Math.min(900,sph.r));
+  sph.r=Math.max(26,Math.min(1500,sph.r));
   camera.position.set(
     target.x+sph.r*Math.sin(sph.ph)*Math.sin(sph.th),
     target.y+sph.r*Math.cos(sph.ph),
     target.z+sph.r*Math.sin(sph.ph)*Math.cos(sph.th));
   camera.lookAt(target);
 }
-var HOME={t:new THREE.Vector3(0,10,0),th:Math.PI*.25,ph:Math.PI*.32,r:430};
+var HOME={t:new THREE.Vector3(0,10,0),th:Math.PI*.25,ph:Math.PI*.33,r:620};
 var fly=null;
 function flyTo(t,th,ph,r,ms){
   fly={t0:performance.now(),ms:ms||1100,
@@ -1065,12 +1322,16 @@ host.addEventListener('touchend',function(){ pinch=0; });
 /* ============================================================ ENTER / EXIT */
 var currentInside=null;
 var insideBar=document.getElementById('insideBar'), insideName=document.getElementById('insideName');
+function setResidents(zone,on){
+  RESIDENTS.forEach(function(r){ if(r.zone===zone) r.p.g.visible=on; });
+}
 function enterBuilding(key){
   var rec=BUILDINGS[key]; if(!rec||rec.noEnter){ focusZone(key); return; }
   if(currentInside===key) return;
   if(currentInside) exitBuilding(true);
   currentInside=key;
   buildInterior(key).visible=true;
+  setResidents(key,true);
   rec.walls.forEach(function(m){ m.visible=false; });
   insideName.textContent=ZONES[key].name; insideBar.classList.add('on');
   var t=new THREE.Vector3(rec.cx,6,rec.cz);
@@ -1083,6 +1344,7 @@ function exitBuilding(quiet){
   var rec=BUILDINGS[currentInside];
   rec.walls.forEach(function(m){ m.visible=true; });
   if(rec.interior) rec.interior.visible=false;
+  setResidents(currentInside,false);
   currentInside=null; insideBar.classList.remove('on');
   if(!quiet) flyTo(HOME.t,HOME.th,HOME.ph,HOME.r,1200);
 }
@@ -1205,23 +1467,28 @@ function log(who,msg,hi){
 /* ============================================================ SIM */
 var running=true,speed=1,tasksToday=0,handoffs=0,last=performance.now();
 function pick(a){ return a[Math.floor(Math.random()*a.length)]; }
+
+/* what an agent does once it is settled in a given room */
+var ZONE_POSE={ iron:['lift','lift','lean'], office:['sit','sit','talk'], press:['talk','lean','sit'],
+  market:['idle','lean','sit'], whiskey:['lean','talk','sit'], hall:['sit','sit','talk'], row:['idle','talk','lean'] };
+var SEAT_Y={ sit:4.6 };
+function settle(a){
+  var rec=BUILDINGS[a.zone];
+  a.pose=pick(ZONE_POSE[a.zone]||['idle']);
+  var spread=Math.min(rec.w,rec.d)*0.28;
+  a.pos.set(rec.cx+(Math.random()-.5)*spread, 0, rec.cz+(Math.random()-.5)*spread);
+  a.seatY = a.pose==='sit' ? 4.6 : 0;
+  a.faceY = Math.random()*Math.PI*2;
+  a.p.g.position.set(a.pos.x,a.seatY,a.pos.z);
+  a.p.g.rotation.y=a.faceY;
+}
 function chooseZone(a){
   if(Math.random()<.40) return a.home;
   if(a.id==='guard') return pick(ZKEYS);
   if((TOD>.80||TOD<.09)&&Math.random()<.5) return 'whiskey';
   return pick(ZKEYS);
 }
-function walkAnim(p,ph,moving){
-  if(moving){
-    var s=Math.sin(ph*8)*0.72;
-    p.l1.rotation.x=s; p.l2.rotation.x=-s;
-    p.a1.rotation.x=-s*.6; p.a2.rotation.x=s*.6;
-    p.g.position.y=Math.abs(Math.sin(ph*8))*0.34;
-  }else{
-    p.l1.rotation.x*=.85; p.l2.rotation.x*=.85; p.a1.rotation.x*=.85; p.a2.rotation.x*=.85;
-    p.g.position.y=Math.sin(ph*1.5)*.12;
-  }
-}
+function walkAnim(p,ph,moving){ setPose(p, moving?'walk':'idle', ph); }
 function advance(ent,dt){
   if(!ent.path.length) return true;
   var tgt=ent.path[ent.pi];
@@ -1248,6 +1515,17 @@ function step(dt){
   var ang=(TOD-0.25)*Math.PI*2;
   var elev=Math.sin(ang);
   sun.position.set(Math.cos(ang)*360,Math.max(-60,elev*400),160);
+  /* park the visible bodies far out along the light direction */
+  var sd=sun.position.clone().normalize().multiplyScalar(1650);
+  sunDisc.position.copy(sd); sunGlow.position.copy(sd); sunWide.position.copy(sd);
+  var vis=elev>-0.12;
+  sunDisc.visible=sunGlow.visible=sunWide.visible=vis;
+  sunDisc.material.color.setHSL(0.11,0.55,0.72+Math.max(0,elev)*0.24);
+  sunGlow.material.opacity=0.10+Math.max(0,1-Math.abs(elev))*0.22;
+  var md=sd.clone().negate();
+  moonDisc.position.copy(md); moonGlow.position.copy(md);
+  moonDisc.visible=moonGlow.visible=elev<0.08;
+  starMat.opacity=Math.max(0,Math.min(1,(0.10-elev)*4));
   sun.target.position.set(0,0,0); sun.target.updateMatrixWorld();
   var day=Math.max(0,elev);
   var night=1-day;
@@ -1292,13 +1570,17 @@ function step(dt){
     }
     else { /* work */
       a.wait-=dt;
-      if(a.inside && Math.random()<dt*0.55){
+      if(a.inside && a.pose!=='sit' && Math.random()<dt*0.30){
         var rc=BUILDINGS[a.zone];
         a.path=[new THREE.Vector3(rc.cx+(Math.random()-.5)*(rc.w-18),0,rc.cz+(Math.random()-.5)*(rc.d-18))];
-        a.pi=0;
+        a.pi=0; a.seatY=0;
       }
-      if(a.path.length){ advance(a,dt); walkAnim(a.p,a.ph,true); }
-      else walkAnim(a.p,a.ph,false);
+      if(a.path.length){ advance(a,dt); setPose(a.p,'walk',a.ph); }
+      else if(a.inside){
+        setPose(a.p,a.pose||'idle',a.ph,a.faceY);
+        a.p.g.position.y=(a.seatY||0)+a.p.g.position.y;
+      }
+      else setPose(a.p,'idle',a.ph);
       if(a.wait<=0){
         var zk=chooseZone(a);
         if(zk===a.zone){
@@ -1320,6 +1602,19 @@ function step(dt){
     if(rz) rz.textContent=(a.state==='travel'?'\u2192 ':(a.inside?'\u25AA ':''))+ZONES[a.zone].name;
     var rd=document.getElementById('rd_'+a.id);
     if(rd) rd.className='ag-d '+(a.state==='travel'?'d-move':(a.inside?'d-in':'d-work'));
+  });
+
+  /* park-goers */
+  PARKPPL.forEach(function(r){
+    r.ph+=dt; setPose(r.p,r.pose,r.ph);
+    r.p.g.position.y=r.y+r.p.g.position.y*0.0;
+  });
+
+  /* residents inside whichever room you are standing in */
+  RESIDENTS.forEach(function(r){
+    if(!r.p.g.visible) return;
+    r.ph+=dt;
+    setPose(r.p,r.pose,r.ph);
   });
 
   /* npcs */
