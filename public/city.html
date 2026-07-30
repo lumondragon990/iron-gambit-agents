@@ -89,15 +89,18 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
   font-family:var(--sans);pointer-events:auto;cursor:pointer}
 .plate .dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:7px;vertical-align:middle;
   box-shadow:0 0 10px currentColor}
-.plate .nm{font-size:17px;font-weight:400;letter-spacing:.03em;color:#fff;
+.plate .nm{font-size:15px;font-weight:400;letter-spacing:.03em;color:#fff;
   text-shadow:0 0 14px rgba(0,0,0,.95),0 1px 3px #000}
-.plate .bar{height:2px;margin:3px 0 3px 14px;border-radius:2px;box-shadow:0 0 8px currentColor}
-.plate .rl{font-size:10.5px;letter-spacing:.03em;color:rgba(255,255,255,.82);margin-left:14px;
+.plate .rule{height:2px;margin:3px 0 3px 14px;border-radius:2px;box-shadow:0 0 8px currentColor}
+.plate .rl{font-size:9.5px;display:none;letter-spacing:.03em;color:rgba(255,255,255,.82);margin-left:14px;
   text-shadow:0 0 10px rgba(0,0,0,.95)}
-.plate .tk{font-family:var(--mono);font-size:9px;letter-spacing:.02em;color:rgba(240,218,168,.9);
+.plate .tk{font-family:var(--mono);font-size:8.5px;display:none;letter-spacing:.02em;color:rgba(240,218,168,.9);
   margin-left:14px;margin-top:2px;max-width:230px;overflow:hidden;text-overflow:ellipsis;
   text-shadow:0 0 10px rgba(0,0,0,.95)}
-.plate.big .nm{font-size:20px}
+.plate.big .nm{font-size:19px}
+.plate.big .rl,.plate.big .tk{display:block}
+.plate .rule{width:56px}
+.plate.big .rule{width:88px}
 .plate.dim{opacity:.42}
 .hud{position:absolute;left:14px;bottom:14px;font-family:var(--mono);font-size:9px;letter-spacing:.1em;
   color:rgba(216,182,120,.5);pointer-events:none;line-height:1.9}
@@ -299,6 +302,11 @@ function cyl(rt,rb,h,seg,m,x,y,z,parent){
   (parent||scene).add(mesh); return mesh;
 }
 
+trunkM=mat(0x4A3826,.95,0);
+leafA=mat(0x2E5B25,.9,0);
+leafB=mat(0x39702C,.9,0);
+poleM=mat(0x2E3236,.6,.5);
+
 /* facade texture with windows */
 var FACADE={};
 function facade(base,frame,cols,rows,lit){
@@ -323,6 +331,11 @@ function facade(base,frame,cols,rows,lit){
   FACADE[key]=t; return t;
 }
 
+/* Prop materials. Declared up here because parks build trees and lamps before
+   the street-props section runs — otherwise Three.js falls back to default white. */
+var LEAF=[0x2E5B25,0x39702C,0x24491F,0x4A7A31,0x6B7A26,0x8A6B22];
+var trunkM=null, leafA=null, leafB=null, poleM=null;
+
 /* skin tones — declared early because parks and interiors both build people */
 var SKIN=[0xC98A5E,0xE0AE84,0x8E5A38,0xB4784E,0xD69C72,0x6F4326];
 
@@ -338,7 +351,7 @@ function bc(i){ return bx0(i)+BLOCK/2; }                       /* block center *
 function roadC(i){ return ORIGIN+ROAD/2+i*(BLOCK+ROAD); }      /* road centreline, i=0..GRID */
 
 /* ground */
-var ground=new THREE.Mesh(new THREE.PlaneGeometry(2600,2600),mat(0x14180F,1,0));
+var ground=new THREE.Mesh(new THREE.PlaneGeometry(2600,2600),mat(0x1B2415,1,0));
 ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground);
 
 /* roads — one strip mesh each, dashes come from a repeating texture */
@@ -572,7 +585,7 @@ var HUB=new THREE.Vector3(0,0,0); var hallOrb=null, hallHalo=null;
 
 /* ============================================================ PARKS */
 var PARKS=[[0,6],[6,6],[1,1],[5,4]];
-var grassM=mat(0x24401F,.98,0), pathM=mat(0x50493C,.95,0), waterM=null;
+var grassM=mat(0x315C22,.98,0), pathM=mat(0x6B6152,.95,0), waterM=null;
 function bench(x,z,ry){
   var g=new THREE.Group(); g.position.set(x,0,z); if(ry) g.rotation.y=ry; scene.add(g);
   var wood=mat(0x6B4A2C,.9,.02), iron=mat(0x2A2C2E,.7,.35);
@@ -638,7 +651,9 @@ PARKS.forEach(function(pk,pi2){
 var used={};
 Object.keys(ZONES).forEach(function(k){ used[ZONES[k].blk[0]+','+ZONES[k].blk[1]]=1; });
 PARKS.forEach(function(p){ used[p[0]+','+p[1]]=1; });
-var fillCols=[0x33302B,0x2C3238,0x3A342C,0x2A2E33,0x38322A,0x30343A];
+var fillCols=[0x3E3228,0x2E3A44,0x4A3038,0x2C3A32,0x453A2A,0x33304A,0x4A3A22,0x2A3E3E,
+              0x50382C,0x35304A,0x3A4438,0x4A2E38];
+var awningCols=[0x8A2C34,0xB9A488,0x2E6A7A,0xC46A28,0x6A8A3A,0x7A3A6A,0xD8B678,0x3A5A8A];
 for(var fi=0;fi<GRID;fi++) for(var fj=0;fj<GRID;fj++){
   if(used[fi+','+fj]) continue;
   var cx2=bc(fi), cz2=bc(fj);
@@ -654,25 +669,40 @@ for(var fi=0;fi<GRID;fi++) for(var fj=0;fj<GRID;fj++){
       emissiveMap:tx,emissive:0xffffff,emissiveIntensity:0});
     emissiveWindows.push(mm);
     box(w2,h2,d2,mm,cx2+ox,h2/2,cz2+oz,0,scene);
-    box(w2+1.4,1.6,d2+1.4,mat(shade(col2,1.2),.9,.04),cx2+ox,h2+.8,cz2+oz,0,scene);
+    box(w2+1.4,1.6,d2+1.4,mat(shade(col2,1.25),.9,.04),cx2+ox,h2+.8,cz2+oz,0,scene);
+
+    /* ground-floor shopfront: glass, a coloured awning, and a warm interior glow */
+    var aC=awningCols[(fi*5+fj*3+q)%awningCols.length];
+    var gx3=cx2+ox, gz3=cz2+oz+d2/2;
+    var shopM=new THREE.MeshStandardMaterial({color:0x14181C,roughness:.15,metalness:.5,
+      emissive:aC,emissiveIntensity:.22});
+    neonMats.push({m:shopM,base:.22,gain:.9});
+    box(w2*.86,7.5,.6,shopM,gx3,4.6,gz3+.2,0,scene,true);
+    box(w2*.9,1.1,4.2,mat(aC,.8,.05),gx3,9.4,gz3+2.1,0,scene);
+    box(w2*.9,2.6,.5,mat(shade(aC,.7),.8,.05),gx3,8.2,gz3+4.1,0,scene);
+    /* rooftop accent band in the same colour */
+    box(w2+1.8,.8,d2+1.8,mat(aC,.75,.15),gx3,h2+2,cz2+oz,0,scene,true);
   }
 }
 
 /* ============================================================ STREET PROPS */
-var trunkM=mat(0x3B2E22,.95,0), leafA=mat(0x24361F,.95,0), leafB=mat(0x2E4527,.95,0);
+var _tn=0;
 function tree(x,z,s){
-  s=s||1;
-  cyl(.7*s,1*s,7*s,8,trunkM,x,3.5*s,z,scene);
-  var a=new THREE.Mesh(new THREE.SphereGeometry(5.2*s,10,8),leafA); a.position.set(x,10*s,z);
+  s=s||1; _tn++;
+  var base=LEAF[_tn%LEAF.length];
+  var m1=mat(base,.9,0), m2=mat(shade(base,1.22),.9,0), m3=mat(shade(base,.78),.9,0);
+  cyl(.8*s,1.2*s,7*s,8,trunkM,x,3.5*s,z,scene);
+  var a=new THREE.Mesh(new THREE.SphereGeometry(5.4*s,11,9),m1); a.position.set(x,10.2*s,z);
   a.castShadow=true; scene.add(a);
-  var b=new THREE.Mesh(new THREE.SphereGeometry(4*s,10,8),leafB); b.position.set(x+1.6*s,13*s,z-1.2*s);
+  var b=new THREE.Mesh(new THREE.SphereGeometry(4.1*s,11,9),m2); b.position.set(x+1.7*s,13.2*s,z-1.2*s);
   b.castShadow=true; scene.add(b);
-  var c=new THREE.Mesh(new THREE.SphereGeometry(3*s,10,8),leafA); c.position.set(x-2*s,12.4*s,z+1.4*s);
+  var c=new THREE.Mesh(new THREE.SphereGeometry(3.2*s,10,8),m3); c.position.set(x-2.1*s,12.5*s,z+1.5*s);
   c.castShadow=true; scene.add(c);
+  var d=new THREE.Mesh(new THREE.SphereGeometry(2.4*s,9,7),m2); d.position.set(x+.6*s,15.4*s,z+.8*s);
+  d.castShadow=true; scene.add(d);
 }
 /* Streetlamps are emissive geometry, not real lights. A real PointLight per lamp
    would be ~50 lights in the scene and WebGL's forward renderer cannot compile that. */
-var poleM=mat(0x2E3236,.6,.5);
 var bulbM=new THREE.MeshStandardMaterial({color:0xFFE6B0,emissive:0xFFD98A,emissiveIntensity:.35,roughness:.4});
 neonMats.push({m:bulbM,base:.35,gain:2.6});
 var poolGeo=new THREE.CircleGeometry(11,16);
@@ -1232,7 +1262,7 @@ AGENTS.forEach(function(a){
   el.className='plate';
   el.innerHTML='<div><span class="dot" style="color:'+hexs(a.neon)+';background:'+hexs(a.neon)+'"></span>'+
     '<span class="nm">'+a.person+'</span></div>'+
-    '<div class="bar" style="color:'+hexs(a.neon)+';background:'+hexs(a.neon)+'"></div>'+
+    '<div class="rule" style="color:'+hexs(a.neon)+';background:'+hexs(a.neon)+'"></div>'+
     '<div class="rl">'+a.role+'</div><div class="tk" id="tk_'+a.id+'"></div>';
   el.addEventListener('click',function(){ select(a.id); followAgent(a); });
   platesEl.appendChild(el);
