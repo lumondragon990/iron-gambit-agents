@@ -4,10 +4,26 @@
  *   /admin  a token-gated dashboard: trigger agents, read runs, approve outreach.
  */
 
-const SHELL = (title, body) => `<!DOCTYPE html>
+import { CREST_SYMBOL, CREST_VIEWBOX } from './logo.js';
+
+const NAV = (here) => `
+<div class="topbar">
+  <a class="brandmark" href="/">
+    <svg viewBox="${CREST_VIEWBOX}"><use href="#crest"/></svg>
+    <span>Iron Gambit</span>
+  </a>
+  <nav class="tabs">
+    <a href="/"      class="${here === 'status' ? 'on' : ''}">Status</a>
+    <a href="/admin" class="${here === 'admin'  ? 'on' : ''}">Admin</a>
+    <a href="/city"  class="${here === 'city'   ? 'on' : ''}">The Yard</a>
+  </nav>
+</div>`;
+
+const SHELL = (title, body, here) => `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${title}</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Jost:wght@300;400;500&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
@@ -45,7 +61,22 @@ pre::-webkit-scrollbar{width:4px}pre::-webkit-scrollbar-thumb{background:var(--d
 a{color:var(--gold)}
 .note{font-size:12px;color:var(--smoke);margin-top:8px}
 .err{color:var(--bad);font-size:12.5px;margin-top:10px}
-</style></head><body><div class="wrap">${body}</div></body></html>`;
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;
+padding-bottom:18px;border-bottom:1px solid var(--ln);margin-bottom:26px}
+.brandmark{display:flex;align-items:center;gap:11px;text-decoration:none}
+.brandmark svg{width:40px;height:40px;color:var(--gold);flex:none}
+.brandmark span{font-family:var(--serif);font-weight:600;font-size:19px;letter-spacing:.18em;
+text-transform:uppercase;color:var(--cream)}
+.tabs{display:flex;gap:8px}
+.tabs a{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;
+color:var(--smoke);border:1px solid var(--ln);padding:8px 13px;text-decoration:none;transition:all .2s}
+.tabs a:hover{border-color:var(--dp);color:var(--gold)}
+.tabs a.on{border-color:var(--gold);color:var(--gold)}
+.hero{display:flex;align-items:center;gap:20px;margin-bottom:8px}
+.hero svg{width:74px;height:74px;color:var(--gold);flex:none}
+</style></head><body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">${CREST_SYMBOL}</svg>
+<div class="wrap">${NAV(here)}${body}</div></body></html>`;
 
 export function statusPage(agents, tz) {
   const rows = agents.map(a => `
@@ -57,18 +88,24 @@ export function statusPage(agents, tz) {
       </div>
     </div></div>`).join('');
   return SHELL('Iron Gambit — Command', `
-    <h1>Iron Gambit</h1><div class="sub">Command · Agent Service</div>
+    <div class="hero"><svg viewBox="${CREST_VIEWBOX}"><use href="#crest"/></svg>
+      <div><h1>Iron Gambit</h1><div class="sub">Command · Agent Service</div></div></div>
     <div class="rule"></div>
     <div class="card"><span class="pip"></span>Running. ${agents.length} agents loaded.</div>
+    <div class="row" style="margin:16px 0 4px">
+      <a class="btn" href="/city">Open the 3D yard</a>
+      <a class="btn" href="/admin">Admin controls</a>
+    </div>
     <h2>The crew</h2>${rows}
     <div class="rule"></div>
     <p class="note">This page is public and shows nothing sensitive.
-    Controls: <a href="/admin">/admin</a> &nbsp;·&nbsp; 3D view: <a href="/city">/city</a> &nbsp;·&nbsp; <a href="/health">/health</a></p>`);
+    Health check: <a href="/health">/health</a></p>`, 'status');
 }
 
 export function adminPage() {
   return SHELL('Command — Admin', `
-    <h1>Command</h1><div class="sub">Admin</div>
+    <div class="hero"><svg viewBox="${CREST_VIEWBOX}"><use href="#crest"/></svg>
+      <div><h1>Command</h1><div class="sub">Admin</div></div></div>
     <div class="rule"></div>
     <div class="row" style="margin-bottom:20px"><a class="btn" href="/city">Open the 3D yard</a>
     <button class="bad" onclick="localStorage.removeItem('igt');sessionStorage.clear();location.reload()">Lock</button></div>
@@ -170,5 +207,5 @@ async function loadRuns(){
 
 var saved=localStorage.getItem('igt');
 if(saved){ document.getElementById('tok').value=saved; unlock(); }
-</script>`);
+</script>`, 'admin');
 }
