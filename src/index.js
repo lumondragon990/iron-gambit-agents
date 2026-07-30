@@ -5,6 +5,7 @@ import { AGENTS, byId } from './agents.config.js';
 import { runAgent } from './runner.js';
 import { listOutbox, setOutboxStatus, recentRuns } from './store.js';
 import { sendOutreach, notify } from './notify.js';
+import { statusPage, adminPage } from './dashboard.js';
 
 const app = express();
 app.use(express.json());
@@ -19,6 +20,14 @@ function admin(req, res, next) {
   }
   next();
 }
+
+/* Root: a plain status page so the service does not answer "Cannot GET /". */
+app.get('/', (_, res) => res.type('html').send(
+  statusPage(AGENTS.map(a => ({ name: a.name, schedule: a.schedule, search: !!a.search })), TZ)
+));
+
+/* Browser dashboard. The page itself is harmless; every call it makes needs the token. */
+app.get('/admin', (_, res) => res.type('html').send(adminPage()));
 
 app.get('/health', (_, res) => res.json({ ok: true, agents: AGENTS.length, tz: TZ }));
 
@@ -77,6 +86,11 @@ for (const a of AGENTS) {
   }, { timezone: TZ });
   console.log(`[cron] ${a.id.padEnd(10)} ${a.schedule}  (${TZ})`);
 }
+
+app.use((req, res) => res.status(404).json({
+  error: 'no such route',
+  try: ['/', '/admin', '/health', '/agents']
+}));
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => console.log(`Iron Gambit Command listening on ${port}`));
