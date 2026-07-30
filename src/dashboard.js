@@ -15,6 +15,7 @@ const NAV = (here) => `
   <nav class="tabs">
     <a href="/"      class="${here === 'status' ? 'on' : ''}">Status</a>
     <a href="/admin" class="${here === 'admin'  ? 'on' : ''}">Admin</a>
+    <a href="/work"  class="${here === 'work'   ? 'on' : ''}">Work</a>
     <a href="/city"  class="${here === 'city'   ? 'on' : ''}">The Yard</a>
   </nav>
 </div>`;
@@ -84,6 +85,24 @@ color:var(--smoke);border:1px solid var(--ln);padding:8px 13px;text-decoration:n
 .tabs a:hover{border-color:var(--dp);color:var(--gold)}
 .tabs a.on{border-color:var(--gold);color:var(--gold)}
 .hero{display:flex;align-items:center;gap:20px;margin-bottom:8px}
+.wrap{max-width:1040px}
+.subtabs{display:flex;gap:6px;flex-wrap:wrap;margin:18px 0 8px}
+.subtabs button{border:1px solid var(--ln);color:var(--smoke);padding:9px 15px}
+.subtabs button.on{border-color:var(--gold);color:var(--gold);background:rgba(216,182,120,.07)}
+.lead{border:1px solid var(--ln);border-left-width:3px;padding:14px 16px;margin-bottom:8px}
+.fit{font-family:var(--serif);font-size:27px;font-weight:600;line-height:1;width:52px;flex:none}
+.pill{font-family:var(--mono);font-size:8.5px;letter-spacing:.16em;text-transform:uppercase;
+border:1px solid var(--ln);padding:3px 8px;color:var(--smoke)}
+.pill.hot{border-color:#D98A7A;color:#D98A7A}
+.pill.booked{border-color:#6FBF73;color:#6FBF73}
+.out{border:1px solid var(--ln);padding:16px 18px;margin-bottom:10px}
+.out h3{font-family:var(--serif);font-size:19px;font-weight:600;letter-spacing:.05em;text-transform:uppercase}
+.out pre{max-height:none}
+.fold{max-height:150px;overflow:hidden;position:relative}
+.fold:after{content:"";position:absolute;left:0;right:0;bottom:0;height:60px;
+background:linear-gradient(transparent,var(--ob))}
+.tiny{font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--smoke)}
+.empty{border:1px dashed var(--ln);padding:28px;text-align:center;color:var(--smoke);font-size:12.5px}
 .hero svg{width:74px;height:74px;color:var(--gold);flex:none}
 </style></head><body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">${CREST_SYMBOL}</svg>
@@ -111,6 +130,169 @@ export function statusPage(agents, tz) {
     <div class="rule"></div>
     <p class="note">This page is public and shows nothing sensitive.
     Health check: <a href="/health">/health</a></p>`, 'status');
+}
+
+export function workPage() {
+  return SHELL('Command — Work', `
+    <div class="hero"><svg viewBox="${CREST_VIEWBOX}"><use href="#crest"/></svg>
+      <div><h1>The Work</h1><div class="sub">Leads · Content · Outreach</div></div></div>
+    <div class="rule"></div>
+    <div id="gate">
+      <h2>Enter PIN</h2>
+      <div class="dots" id="dots"></div>
+      <div class="pad" id="pad"></div>
+      <div class="err" id="gateErr"></div>
+    </div>
+    <div id="panel" style="display:none">
+      <div class="subtabs">
+        <button id="t_leads"   class="on" onclick="tab('leads')">Leads</button>
+        <button id="t_content" onclick="tab('content')">Content</button>
+        <button id="t_reach"   onclick="tab('reach')">Outreach</button>
+        <button id="t_all"     onclick="tab('all')">Everything</button>
+      </div>
+      <div id="body"></div>
+    </div>
+<script>
+var T='', PINLEN=4, entry='', locked=false, TAB='leads', RUNS=[];
+function h(){return {'x-admin-pin':T,'Content-Type':'application/json'};}
+function esc(s){return String(s==null?'':s).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];});}
+function when(d){return new Date(d).toLocaleString();}
+
+function drawDots(){var d=document.getElementById('dots');d.innerHTML='';
+  for(var i=0;i<PINLEN;i++){var s=document.createElement('i');if(i<entry.length)s.className='on';d.appendChild(s);}}
+function buildPad(){var p=document.getElementById('pad');p.innerHTML='';
+  ['1','2','3','4','5','6','7','8','9','clear','0','back'].forEach(function(k){
+    var b=document.createElement('button');
+    if(k==='clear'||k==='back'){b.className='alt';b.textContent=(k==='back'?'DEL':'CLR');}else b.textContent=k;
+    b.onclick=function(){ if(locked)return;
+      if(k==='clear')entry=''; else if(k==='back')entry=entry.slice(0,-1);
+      else if(entry.length<PINLEN)entry+=k;
+      drawDots(); if(entry.length===PINLEN) unlock(); };
+    p.appendChild(b);});
+  drawDots();}
+document.addEventListener('keydown',function(e){
+  if(document.getElementById('gate').style.display==='none'||locked)return;
+  if(/^[0-9]$/.test(e.key)&&entry.length<PINLEN){entry+=e.key;drawDots();if(entry.length===PINLEN)unlock();}
+  if(e.key==='Backspace'){entry=entry.slice(0,-1);drawDots();}});
+
+async function boot(){
+  buildPad();
+  try{ var hj=await (await fetch('/health')).json();
+    if(hj.pin_length){ PINLEN=hj.pin_length; drawDots(); }
+    else document.getElementById('gateErr').innerHTML='No PIN set. Add <b>ADMIN_PIN</b> in Railway.';
+  }catch(e){ document.getElementById('gateErr').textContent='Could not reach the service.'; }
+  var sv=localStorage.getItem('igpin'); if(sv){ T=sv; entry=sv; drawDots(); unlock(true); }
+}
+async function unlock(silent){
+  T = silent ? T : entry;
+  var e=document.getElementById('gateErr'); e.textContent='';
+  try{
+    var r=await fetch('/leads',{headers:h()});
+    if(r.status===429){var j=await r.json();locked=true;
+      e.textContent='Locked for '+Math.ceil((j.retry_in_seconds||900)/60)+' minutes.';entry='';drawDots();return;}
+    if(r.status===401){var j2=await r.json();
+      e.textContent='Wrong PIN. '+(j2.tries_left!=null?j2.tries_left+' tries left.':'');
+      entry='';drawDots();localStorage.removeItem('igpin');return;}
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    localStorage.setItem('igpin',T);
+    document.getElementById('gate').style.display='none';
+    document.getElementById('panel').style.display='block';
+    RUNS=await (await fetch('/runs',{headers:h()})).json();
+    tab('leads');
+  }catch(err){ e.textContent='Could not reach the service: '+err.message; entry='';drawDots(); }
+}
+
+function tab(t){
+  TAB=t;
+  ['leads','content','reach','all'].forEach(function(k){
+    document.getElementById('t_'+k).classList.toggle('on',k===t); });
+  if(t==='leads') renderLeads();
+  if(t==='content') renderContent();
+  if(t==='reach') renderReach();
+  if(t==='all') renderAll();
+}
+
+var STATUS_COLOR={new:'#4EA8FF',applied:'#FFB55C',booked:'#6FBF73',passed:'#57514A'};
+async function renderLeads(){
+  var b=document.getElementById('body'); b.innerHTML='<div class="tiny">Loading…</div>';
+  var rows=await (await fetch('/leads',{headers:h()})).json();
+  if(!rows.length){
+    b.innerHTML='<div class="empty">No leads yet.<br><br>Run <b>Reyes</b> from the Admin page and they will land here.</div>';
+    return; }
+  b.innerHTML=rows.map(function(r){
+    var dl=r.deadline? Math.round((new Date(r.deadline)-Date.now())/86400000):null;
+    var hot=dl!=null&&dl<=14;
+    return '<div class="lead" style="border-left-color:'+(STATUS_COLOR[r.status]||'#4EA8FF')+'">'+
+      '<div class="row"><div class="fit" style="color:'+(r.fit_score>=8?'#6FBF73':r.fit_score>=6?'#FFB55C':'#8B8078')+'">'+
+      (r.fit_score||'?')+'</div><div class="grow">'+
+      '<div class="name">'+esc(r.name)+'</div>'+
+      '<div class="meta">'+esc(r.venue||'venue unknown')+'  ·  '+esc(r.event_date||'date TBC')+'  ·  '+esc(r.cost||'cost unknown')+'</div>'+
+      (r.notes?'<div class="meta" style="color:#A79E93;margin-top:4px">'+esc(r.notes)+'</div>':'')+
+      '<div class="row" style="margin-top:8px;gap:6px">'+
+        '<span class="pill '+(r.status==='booked'?'booked':'')+'">'+esc(r.status||'new')+'</span>'+
+        (hot?'<span class="pill hot">deadline in '+dl+'d</span>':'')+
+        (r.apply_url?'<a class="pill" style="color:#D8B678;border-color:#9C7C43" target="_blank" href="'+esc(r.apply_url)+'">Open</a>':'')+
+      '</div></div>'+
+      '<div style="display:flex;flex-direction:column;gap:5px">'+
+        '<button onclick="mark('+r.id+',\'applied\')">Applied</button>'+
+        '<button onclick="mark('+r.id+',\'booked\')">Booked</button>'+
+        '<button class="bad" onclick="mark('+r.id+',\'passed\')">Pass</button>'+
+      '</div></div></div>';
+  }).join('');
+}
+async function mark(id,st){
+  await fetch('/leads/'+id+'/status',{method:'POST',headers:h(),body:JSON.stringify({status:st})});
+  renderLeads();
+}
+
+var CONTENT_AGENTS=['wick','vega','content','quinn','copy','ember'];
+function card(r,folded){
+  var id='r'+r.id;
+  return '<div class="out"><div class="row"><div class="grow">'+
+    '<h3>'+esc(r.agent)+'</h3><div class="tiny">'+when(r.created_at||r.at)+'  ·  '+esc(r.trigger||'')+'</div></div>'+
+    '<button onclick="copyRun('+r.id+')">Copy</button>'+
+    '<button onclick="toggle(\''+id+'\')">Expand</button></div>'+
+    '<pre id="'+id+'" class="'+(folded?'fold':'')+'">'+esc(r.output||r.text||'')+'</pre></div>';
+}
+function toggle(id){ var e=document.getElementById(id); e.classList.toggle('fold'); }
+async function copyRun(id){
+  var r=await (await fetch('/runs/'+id,{headers:h()})).json();
+  try{ await navigator.clipboard.writeText(r.output||''); alert('Copied.'); }
+  catch(e){ alert('Clipboard blocked. Hit Expand and select the text.'); }
+}
+async function refreshRuns(){ RUNS=await (await fetch('/runs',{headers:h()})).json(); }
+
+function renderContent(){
+  var rows=RUNS.filter(function(r){ return CONTENT_AGENTS.indexOf(r.agent)>=0; });
+  document.getElementById('body').innerHTML = rows.length
+    ? rows.map(function(r){return card(r,true);}).join('')
+    : '<div class="empty">No content yet.<br><br>Run <b>Wick</b> for a TikTok post or <b>Ember</b> for the week\'s plan.</div>';
+}
+async function renderReach(){
+  var b=document.getElementById('body'); b.innerHTML='<div class="tiny">Loading…</div>';
+  var o=await (await fetch('/outbox',{headers:h()})).json();
+  if(!o.length){ b.innerHTML='<div class="empty">Nothing waiting.<br><br>Run <b>Marisol</b> to find creators and draft the ask.</div>'; return; }
+  b.innerHTML=o.map(function(x){
+    return '<div class="out"><div class="row"><div class="grow">'+
+      '<h3>'+esc(x.to_name||'Unknown')+'</h3>'+
+      '<div class="tiny">'+esc(x.handle||'')+'  ·  '+(x.to_email?esc(x.to_email):'DM only, send by hand')+'</div></div>'+
+      (x.to_email?'<button onclick="send('+x.id+')">Send</button>':'')+
+      '<button class="bad" onclick="rej('+x.id+')">Reject</button></div>'+
+      '<pre>'+esc(x.subject?('Subject: '+x.subject+'\n\n'):'')+esc(x.body)+'</pre></div>';
+  }).join('');
+}
+async function send(id){ var r=await fetch('/outbox/'+id+'/approve',{method:'POST',headers:h()});
+  var j=await r.json(); if(j.error) alert(j.error); renderReach(); }
+async function rej(id){ await fetch('/outbox/'+id+'/reject',{method:'POST',headers:h()}); renderReach(); }
+
+async function renderAll(){
+  await refreshRuns();
+  document.getElementById('body').innerHTML = RUNS.length
+    ? RUNS.map(function(r){return card(r,true);}).join('')
+    : '<div class="empty">Nothing has run yet.</div>';
+}
+boot();
+</script>`, 'work');
 }
 
 export function adminPage() {
@@ -171,17 +353,13 @@ document.addEventListener('keydown',function(e){
 });
 
 async function boot(){
+  buildPad();
   try{
     var hres=await (await fetch('/health')).json();
-    if(hres.pin_length) PINLEN=hres.pin_length;
-    if(!hres.pin_length){
-      document.getElementById('gateErr').innerHTML=
-        'No PIN is set on the server.<br>Add an <b>ADMIN_PIN</b> variable in Railway, then reload.';
-      document.getElementById('pad').style.display='none';
-      return;
-    }
-  }catch(e){}
-  buildPad();
+    if(hres.pin_length){ PINLEN=hres.pin_length; drawDots(); }
+    else document.getElementById('gateErr').innerHTML=
+      'No PIN set on the server.<br>Add an <b>ADMIN_PIN</b> variable in Railway, then reload.';
+  }catch(e){ document.getElementById('gateErr').textContent='Could not reach the service.'; }
   var saved=localStorage.getItem('igpin');
   if(saved){ T=saved; entry=saved; drawDots(); unlock(true); }
 }
