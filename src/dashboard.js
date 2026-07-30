@@ -60,7 +60,18 @@ pre::-webkit-scrollbar{width:4px}pre::-webkit-scrollbar-thumb{background:var(--d
 .pip{width:7px;height:7px;border-radius:50%;background:var(--ok);display:inline-block;margin-right:8px}
 a{color:var(--gold)}
 .note{font-size:12px;color:var(--smoke);margin-top:8px}
-.err{color:var(--bad);font-size:12.5px;margin-top:10px}
+.err{color:var(--bad);font-size:12.5px;margin-top:10px;min-height:18px}
+.dots{display:flex;gap:14px;justify-content:center;margin:22px 0 26px}
+.dots i{width:14px;height:14px;border-radius:50%;border:1px solid var(--dp);display:block;transition:all .18s}
+.dots i.on{background:var(--gold);border-color:var(--gold);box-shadow:0 0 12px rgba(216,182,120,.7)}
+.pad{display:grid;grid-template-columns:repeat(3,86px);gap:12px;justify-content:center}
+.pad button{font-family:var(--serif);font-size:27px;font-weight:500;letter-spacing:0;text-transform:none;
+height:74px;border:1px solid var(--ln);color:var(--cream);background:none;transition:all .12s;padding:0}
+.pad button:hover{border-color:var(--gold);color:var(--gold)}
+.pad button:active{background:var(--gold);color:var(--ob)}
+.pad button.alt{font-family:var(--mono);font-size:11px;letter-spacing:.12em;color:var(--smoke)}
+#gate{text-align:center;max-width:340px;margin:0 auto}
+#gate h2{text-align:center}
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;
 padding-bottom:18px;border-bottom:1px solid var(--ln);margin-bottom:26px}
 .brandmark{display:flex;align-items:center;gap:11px;text-decoration:none}
@@ -108,19 +119,13 @@ export function adminPage() {
       <div><h1>Command</h1><div class="sub">Admin</div></div></div>
     <div class="rule"></div>
     <div class="row" style="margin-bottom:20px"><a class="btn" href="/city">Open the 3D yard</a>
-    <button class="bad" onclick="localStorage.removeItem('igt');sessionStorage.clear();location.reload()">Lock</button></div>
+    <button class="bad" onclick="localStorage.removeItem('igpin');localStorage.removeItem('igt');location.reload()">Lock</button></div>
     <div id="gate">
-      <h2>Admin token</h2>
-      <input id="tok" type="text" placeholder="paste or type your ADMIN_TOKEN" autocomplete="off"
-             autocapitalize="off" autocorrect="off" spellcheck="false">
-      <div class="row" style="margin-top:12px">
-        <button onclick="unlock()">Unlock</button>
-        <button onclick="pasteIn()">Paste from clipboard</button>
-      </div>
+      <h2>Enter PIN</h2>
+      <div class="dots" id="dots"></div>
+      <div class="pad" id="pad"></div>
       <div class="err" id="gateErr"></div>
-      <p class="note">Stored in this browser so the 3D view can use it too. Hit Lock to clear it.</p>
-      <p class="note">Can't paste? Put it straight in the address bar instead:<br>
-      <code style="color:var(--gold)">/admin?token=YOUR_TOKEN</code></p>
+      <p class="note" id="gateNote">Remembered on this device. The 3D yard uses the same PIN.</p>
     </div>
     <div id="panel" style="display:none">
       <h2>Run an agent now</h2><div id="agents"></div>
@@ -128,23 +133,82 @@ export function adminPage() {
       <h2>Recent runs</h2><div id="runs"></div>
     </div>
 <script>
-var T='';
-function h(){return {'x-admin-token':T,'Content-Type':'application/json'};}
+var T='', PINLEN=4, entry='', locked=false;
+function h(){return {'x-admin-pin':T,'Content-Type':'application/json'};}
 function esc(s){return String(s==null?'':s).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];});}
 function when(d){return new Date(d).toLocaleString();}
 
-async function unlock(){
-  T=document.getElementById('tok').value.trim().replace(/\s+/g,'');
+function drawDots(){
+  var d=document.getElementById('dots'); d.innerHTML='';
+  for(var i=0;i<PINLEN;i++){
+    var s=document.createElement('i');
+    if(i<entry.length) s.className='on';
+    d.appendChild(s);
+  }
+}
+function buildPad(){
+  var p=document.getElementById('pad'); p.innerHTML='';
+  ['1','2','3','4','5','6','7','8','9','clear','0','back'].forEach(function(k){
+    var b=document.createElement('button');
+    if(k==='clear'||k==='back'){ b.className='alt'; b.textContent=(k==='back'?'DEL':'CLR'); }
+    else b.textContent=k;
+    b.onclick=function(){
+      if(locked) return;
+      if(k==='clear') entry='';
+      else if(k==='back') entry=entry.slice(0,-1);
+      else if(entry.length<PINLEN) entry+=k;
+      drawDots();
+      if(entry.length===PINLEN) unlock();
+    };
+    p.appendChild(b);
+  });
+  drawDots();
+}
+document.addEventListener('keydown',function(e){
+  if(document.getElementById('gate').style.display==='none'||locked) return;
+  if(/^[0-9]$/.test(e.key)&&entry.length<PINLEN){ entry+=e.key; drawDots(); if(entry.length===PINLEN) unlock(); }
+  if(e.key==='Backspace'){ entry=entry.slice(0,-1); drawDots(); }
+});
+
+async function boot(){
+  try{
+    var hres=await (await fetch('/health')).json();
+    if(hres.pin_length) PINLEN=hres.pin_length;
+    if(!hres.pin_length){
+      document.getElementById('gateErr').innerHTML=
+        'No PIN is set on the server.<br>Add an <b>ADMIN_PIN</b> variable in Railway, then reload.';
+      document.getElementById('pad').style.display='none';
+      return;
+    }
+  }catch(e){}
+  buildPad();
+  var saved=localStorage.getItem('igpin');
+  if(saved){ T=saved; entry=saved; drawDots(); unlock(true); }
+}
+
+async function unlock(silent){
+  T = silent ? T : entry;
   var e=document.getElementById('gateErr'); e.textContent='';
   try{
     var r=await fetch('/runs',{headers:h()});
-    if(r.status===401){ e.textContent='That token does not match ADMIN_TOKEN. Check for a trailing space in Railway.'; return; }
+    if(r.status===503){ e.textContent='No PIN set on the server. Add ADMIN_PIN in Railway.'; return; }
+    if(r.status===429){
+      var j=await r.json(); locked=true;
+      var secs=j.retry_in_seconds||900;
+      e.textContent='Too many wrong tries. Locked for '+Math.ceil(secs/60)+' minutes.';
+      entry=''; drawDots(); return;
+    }
+    if(r.status===401){
+      var j2=await r.json();
+      e.textContent='Wrong PIN. '+(j2.tries_left!=null? j2.tries_left+' tries left before lockout.':'');
+      entry=''; drawDots(); localStorage.removeItem('igpin'); return;
+    }
     if(!r.ok) throw new Error('HTTP '+r.status);
-    localStorage.setItem('igt',T);
+    localStorage.setItem('igpin',T);
     document.getElementById('gate').style.display='none';
     document.getElementById('panel').style.display='block';
     loadAll();
-  }catch(err){ e.textContent='Could not reach the service: '+err.message; }
+  }catch(err){ e.textContent='Could not reach the service: '+err.message; entry=''; drawDots(); }
 }
 
 async function loadAll(){ await Promise.all([loadAgents(),loadOutbox(),loadRuns()]); }
@@ -211,26 +275,6 @@ async function loadRuns(){
   }).join('') || '<div class="card"><div class="meta">No runs yet.</div></div>';
 }
 
-async function pasteIn(){
-  try{
-    var t=await navigator.clipboard.readText();
-    document.getElementById('tok').value=t.trim();
-    unlock();
-  }catch(e){
-    document.getElementById('gateErr').textContent=
-      'Your browser blocked clipboard access. Type it in, or use /admin?token=YOUR_TOKEN in the address bar.';
-  }
-}
-
-/* Address-bar route: /admin?token=xxxx  — sidesteps any paste restriction. */
-var qp=new URLSearchParams(location.search).get('token');
-if(qp){
-  document.getElementById('tok').value=qp.trim();
-  history.replaceState({},'',location.pathname);   // strip it back out of the URL
-  unlock();
-}else{
-  var saved=localStorage.getItem('igt');
-  if(saved){ document.getElementById('tok').value=saved; unlock(); }
-}
+boot();
 </script>`, 'admin');
 }
