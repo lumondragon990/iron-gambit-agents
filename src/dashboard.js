@@ -111,10 +111,16 @@ export function adminPage() {
     <button class="bad" onclick="localStorage.removeItem('igt');sessionStorage.clear();location.reload()">Lock</button></div>
     <div id="gate">
       <h2>Admin token</h2>
-      <input id="tok" type="password" placeholder="paste your ADMIN_TOKEN" autocomplete="off">
-      <div style="margin-top:12px"><button onclick="unlock()">Unlock</button></div>
+      <input id="tok" type="text" placeholder="paste or type your ADMIN_TOKEN" autocomplete="off"
+             autocapitalize="off" autocorrect="off" spellcheck="false">
+      <div class="row" style="margin-top:12px">
+        <button onclick="unlock()">Unlock</button>
+        <button onclick="pasteIn()">Paste from clipboard</button>
+      </div>
       <div class="err" id="gateErr"></div>
       <p class="note">Stored in this browser so the 3D view can use it too. Hit Lock to clear it.</p>
+      <p class="note">Can't paste? Put it straight in the address bar instead:<br>
+      <code style="color:var(--gold)">/admin?token=YOUR_TOKEN</code></p>
     </div>
     <div id="panel" style="display:none">
       <h2>Run an agent now</h2><div id="agents"></div>
@@ -128,7 +134,7 @@ function esc(s){return String(s==null?'':s).replace(/[&<>]/g,function(c){return 
 function when(d){return new Date(d).toLocaleString();}
 
 async function unlock(){
-  T=document.getElementById('tok').value.trim();
+  T=document.getElementById('tok').value.trim().replace(/\s+/g,'');
   var e=document.getElementById('gateErr'); e.textContent='';
   try{
     var r=await fetch('/runs',{headers:h()});
@@ -205,7 +211,26 @@ async function loadRuns(){
   }).join('') || '<div class="card"><div class="meta">No runs yet.</div></div>';
 }
 
-var saved=localStorage.getItem('igt');
-if(saved){ document.getElementById('tok').value=saved; unlock(); }
+async function pasteIn(){
+  try{
+    var t=await navigator.clipboard.readText();
+    document.getElementById('tok').value=t.trim();
+    unlock();
+  }catch(e){
+    document.getElementById('gateErr').textContent=
+      'Your browser blocked clipboard access. Type it in, or use /admin?token=YOUR_TOKEN in the address bar.';
+  }
+}
+
+/* Address-bar route: /admin?token=xxxx  — sidesteps any paste restriction. */
+var qp=new URLSearchParams(location.search).get('token');
+if(qp){
+  document.getElementById('tok').value=qp.trim();
+  history.replaceState({},'',location.pathname);   // strip it back out of the URL
+  unlock();
+}else{
+  var saved=localStorage.getItem('igt');
+  if(saved){ document.getElementById('tok').value=saved; unlock(); }
+}
 </script>`, 'admin');
 }
