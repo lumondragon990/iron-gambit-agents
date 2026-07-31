@@ -104,6 +104,15 @@ app.get('/city', async (_, res) => {
   }
 });
 
+/* three.js, served from this app so the yard has no external dependency */
+app.get('/vendor/three.min.js', async (_, res) => {
+  try {
+    res.type('application/javascript')
+       .set('Cache-Control', 'public, max-age=31536000, immutable')
+       .send(await readFile(path.join(PUBLIC, 'vendor', 'three.min.js'), 'utf8'));
+  } catch { res.status(404).send('// three.min.js not uploaded to public/vendor/'); }
+});
+
 /* favicon for all three pages */
 app.get('/favicon.svg', async (_, res) => {
   try { res.type('image/svg+xml').send(await readFile(path.join(PUBLIC, 'favicon.svg'), 'utf8')); }
