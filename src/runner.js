@@ -4,6 +4,28 @@ import { ask, askJSON } from './claude.js';
 import { saveRun, saveEvents, queueOutbox } from './store.js';
 import { notify } from './notify.js';
 
+/* The web-search tool wraps sourced claims in <cite> tags and Claude sometimes
+   wraps JSON in markdown fences. Neither belongs in stored copy. */
+function tidy(v) {
+  if (typeof v !== 'string') return v;
+  return v
+    .replace(/<cite[^>]*>/gi, '')
+    .replace(/<\/cite>/gi, '')
+    .replace(/^```(?:json|markdown)?\s*/i, '')
+    .replace(/```\s*$/, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .trim();
+}
+function tidyAll(obj) {
+  if (Array.isArray(obj)) return obj.map(tidyAll);
+  if (obj && typeof obj === 'object') {
+    const out = {};
+    for (const k of Object.keys(obj)) out[k] = tidyAll(obj[k]);
+    return out;
+  }
+  return tidy(obj);
+}
+
 let brandCache = null;
 async function brand() {
   if (brandCache) return brandCache;
@@ -24,15 +46,17 @@ export async function runAgent(agent, { trigger = 'cron', data = '' } = {}) {
   const call = wantsJSON ? askJSON : ask;
   const res = await call({ system, prompt, search: agent.search, maxTokens: 5000 });
 
+  const cleanText = tidy(res.text);
+
   await saveRun({
-    agent: agent.id, output: res.text, trigger,
+    agent: agent.id, output: cleanText, trigger,
     sources: res.sources, usage: res.usage
   });
 
-  let summary = res.text;
+  let summary = cleanText;
 
   if (agent.format === 'events' && res.data?.events) {
-    const rows = res.data.events.map(e => ({
+    const rows = tidyAll(res.data.events).map(e => ({
       name: e.name, venue: e.venue || null,
       event_date: e.event_date || null, cost: e.cost || null,
       apply_url: e.apply_url || null, fit_score: e.fit_score ?? null,
@@ -46,7 +70,7 @@ export async function runAgent(agent, { trigger = 'cron', data = '' } = {}) {
   }
 
   if (agent.format === 'outreach' && res.data?.outreach) {
-    const rows = res.data.outreach.map(o => ({
+    const rows = tidyAll(res.data.outreach).map(o => ({
       agent: agent.id, to_name: o.to_name, handle: o.handle || null,
       platform: o.platform || null, to_email: o.to_email || null,
       subject: o.subject || null, body: o.body, notes: o.why || null,
