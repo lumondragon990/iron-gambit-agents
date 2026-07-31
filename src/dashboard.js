@@ -418,15 +418,35 @@ async function loadAgents(){
 }
 
 async function run(btn,id){
-  btn.disabled=true; var old=btn.textContent; btn.textContent='Working';
-  var pre=document.getElementById('out_'+id); pre.style.display='block'; pre.textContent='Thinking. Search agents take 30 to 60 seconds.';
+  var pre=document.getElementById('out_'+id);
+  if(!pre){ alert('Could not find the output panel for '+id); return; }
+  btn.disabled=true; var old=btn.textContent;
+  pre.style.display='block';
+  var t0=Date.now(), tick=setInterval(function(){
+    var s=Math.round((Date.now()-t0)/1000);
+    btn.textContent=s+'s';
+    pre.textContent='Working. Agents that search the web take 30 to 60 seconds. '+s+'s elapsed.';
+  },1000);
+  pre.textContent='Sending the request…';
   try{
     var r=await fetch('/run/'+id,{method:'POST',headers:h(),body:JSON.stringify({data:''})});
-    var j=await r.json();
-    pre.textContent=j.summary||j.error||JSON.stringify(j,null,2);
+    var txt=await r.text();
+    var j; try{ j=JSON.parse(txt); }catch(e){ j=null; }
+    clearInterval(tick);
+    if(!r.ok){
+      var NL=String.fromCharCode(10);
+      pre.textContent='HTTP '+r.status+NL+NL+((j&&(j.error||j.fix))?[j.error,j.fix].filter(Boolean).join(NL):txt.slice(0,600));
+    } else {
+      pre.textContent=(j&&j.summary)?j.summary:txt.slice(0,4000);
+    }
     loadOutbox(); loadRuns();
-  }catch(e){ pre.textContent='Failed: '+e.message; }
-  btn.disabled=false; btn.textContent=old;
+  }catch(e){
+    clearInterval(tick);
+    var NL2=String.fromCharCode(10);
+    pre.textContent='The request never completed: '+e.message+NL2+NL2+
+      'Usually the server restarted or the run exceeded the proxy timeout. Check the Railway logs.';
+  }
+  btn.disabled=false; btn.textContent=old||'Run';
 }
 
 async function loadOutbox(){
@@ -438,21 +458,19 @@ async function loadOutbox(){
     return '<div class="card"><div class="row"><div class="grow">'+
       '<div class="name">'+esc(x.to_name||'Unknown')+' <span class="meta">'+esc(x.handle||'')+'</span></div>'+
       '<div class="meta">'+mail+'</div></div>'+
-      (x.to_email?'<button onclick="approve(this,'+x.id+')">Send</button>':'')+
-      '<button class="bad" onclick="reject(this,'+x.id+')">Reject</button></div>'+
+      (x.to_email?'<button data-act="send" data-id="'+x.id+'">Send</button>':'')+
+      '<button class="bad" data-act="rej" data-id="'+x.id+'">Reject</button></div>'+
       '<pre>'+esc(x.subject?('Subject: '+x.subject+String.fromCharCode(10,10)):'')+esc(x.body)+'</pre></div>';
   }).join('');
 }
 
-async function approve(btn,id){
-  btn.disabled=true; btn.textContent='Sending';
+async function send(id){
   var r=await fetch('/outbox/'+id+'/approve',{method:'POST',headers:h()});
   var j=await r.json();
-  if(j.error){ btn.textContent='Failed'; alert(j.error); btn.disabled=false; }
-  else loadOutbox();
+  if(j.error) alert(j.error);
+  loadOutbox();
 }
-async function reject(btn,id){
-  btn.disabled=true;
+async function rej(id){
   await fetch('/outbox/'+id+'/reject',{method:'POST',headers:h()});
   loadOutbox();
 }
@@ -466,6 +484,15 @@ async function loadRuns(){
       '<pre>'+esc((x.output||'').slice(0,1400))+'</pre></div>';
   }).join('') || '<div class="card"><div class="meta">No runs yet.</div></div>';
 }
+
+/* One delegated listener for every Run / Send / Reject button. */
+document.addEventListener('click', function(ev){
+  var b = ev.target && ev.target.closest ? ev.target.closest('button') : null;
+  if(!b) return;
+  if(b.dataset.run){ run(b, b.dataset.run); return; }
+  if(b.dataset.act==='send') send(b.dataset.id);
+  if(b.dataset.act==='rej')  rej(b.dataset.id);
+});
 
 boot();
 </script>`, 'admin');
