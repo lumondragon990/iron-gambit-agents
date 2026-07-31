@@ -1,8 +1,47 @@
 import { createClient } from '@supabase/supabase-js';
 
-const url = process.env.SUPABASE_URL;
-const key = process.env.SUPABASE_SERVICE_KEY;
-export const db = url && key ? createClient(url, key, { auth: { persistSession: false } }) : null;
+/* Tidy up whatever got pasted into Railway. People paste the REST endpoint,
+   or drop the scheme, or leave a trailing slash or space. None of that should
+   be able to crash the whole service. */
+function normaliseUrl(raw) {
+  let u = String(raw || '').trim().replace(/^["']|["']$/g, '');
+  if (!u) return '';
+  u = u.replace(/^\s*SUPABASE_URL\s*=\s*/i, '');   // whole KEY=VALUE line pasted into the value box
+  u = u.trim().replace(/^["']|["']$/g, '');
+  u = u.replace(/\/rest\/v1\/?$/i, '');   // the REST endpoint, not the project URL
+  u = u.replace(/\/+$/, '');               // trailing slashes
+  if (!/^https?:\/\//i.test(u)) u = 'https://' + u;   // missing scheme
+  return u;
+}
+
+const url = normaliseUrl(process.env.SUPABASE_URL);
+const key = String(process.env.SUPABASE_SERVICE_KEY || '')
+  .trim()
+  .replace(/^\s*SUPABASE_SERVICE_KEY\s*=\s*/i, '')   // same paste mistake
+  .trim()
+  .replace(/^["']|["']$/g, '');
+
+export let dbError = null;
+export let db = null;
+
+if (url && key) {
+  try {
+    db = createClient(url, key, { auth: { persistSession: false } });
+    if (url !== String(process.env.SUPABASE_URL || '').trim()) {
+      console.log('[store] SUPABASE_URL was tidied to: ' + url);
+    }
+    console.log('[store] Supabase client ready for ' + url);
+  } catch (e) {
+    dbError = e.message;
+    console.error('[store] Supabase client could not be created: ' + e.message);
+  }
+} else {
+  dbError = !url && !key ? 'SUPABASE_URL and SUPABASE_SERVICE_KEY are both missing'
+          : !url ? 'SUPABASE_URL is missing'
+          : 'SUPABASE_SERVICE_KEY is missing';
+}
+
+export const dbUrl = url;
 
 function warn(op) {
   console.warn(`[store] Supabase not configured, skipping ${op}. Set SUPABASE_URL and SUPABASE_SERVICE_KEY.`);
