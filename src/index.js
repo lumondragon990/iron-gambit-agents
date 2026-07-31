@@ -4,7 +4,7 @@ import cron from 'node-cron';
 import { AGENTS, byId } from './agents.config.js';
 import { runAgent } from './runner.js';
 import { listOutbox, setOutboxStatus, recentRuns, worldState,
-         listEvents, setEventStatus, getRun } from './store.js';
+         listEvents, setEventStatus, getRun, db as supa, dbError, dbUrl } from './store.js';
 import { sendOutreach, notify } from './notify.js';
 import { statusPage, adminPage, workPage } from './dashboard.js';
 import { readFile } from 'node:fs/promises';
@@ -177,15 +177,46 @@ app.get('/runs/:id', admin, async (req, res) => {
   res.json(r);
 });
 
-app.get('/health', (_, res) => res.json({
-  ok: true,
-  agents: AGENTS.length,
-  tz: TZ,
-  auth: PIN ? 'PIN configured' : 'NO PIN SET — add ADMIN_PIN in Railway',
-  pin_length: PIN ? PIN.length : 0,
-  supabase: process.env.SUPABASE_URL ? 'configured' : 'not set',
-  email: process.env.RESEND_API_KEY ? 'configured' : 'not set'
-}));
+app.get('/health', (_, res) => {
+  const need = {
+    ANTHROPIC_API_KEY:    'agents cannot think without this',
+    ADMIN_PIN:            'the keypad on /admin and /city',
+    SUPABASE_URL:         'where results are saved',
+    SUPABASE_SERVICE_KEY: 'where results are saved',
+    RESEND_API_KEY:       'optional — the email digest',
+    MAIL_FROM:            'optional — sender address',
+    DIGEST_TO:            'optional — where the digest goes'
+  };
+  const missing = Object.keys(need).filter(k => !process.env[k] || !String(process.env[k]).trim());
+  const blocking = missing.filter(k => !need[k].startsWith('optional'));
+
+  /* Show a masked fingerprint so you can tell a wrong value from a missing one. */
+  const seen = {};
+  Object.keys(need).forEach(k => {
+    const v = (process.env[k] || '').trim();
+    seen[k] = v ? (v.length > 12 ? v.slice(0, 6) + '…' + v.slice(-4) + ' (' + v.length + ' chars)'
+                                 : '(' + v.length + ' chars)')
+                : 'NOT SET';
+  });
+
+  res.json({
+    ok: blocking.length === 0,
+    agents: AGENTS.length,
+    tz: TZ,
+    auth: PIN ? 'PIN configured' : 'NO PIN SET',
+    pin_length: PIN ? PIN.length : 0,
+    anthropic: process.env.ANTHROPIC_API_KEY ? 'configured' : 'NOT SET',
+    supabase: supa ? 'connected' : (dbError || 'NOT SET'),
+    supabase_url_used: dbUrl || null,
+    email: process.env.RESEND_API_KEY ? 'configured' : 'not set (optional)',
+    missing_required: blocking,
+    missing_optional: missing.filter(k => need[k].startsWith('optional')),
+    variables_seen: seen,
+    next_step: blocking.length
+      ? 'Add these in Railway > your service > Variables, spelled exactly as shown: ' + blocking.join(', ')
+      : 'All required variables present. Open /admin and run an agent.'
+  });
+});
 
 app.get('/agents', (_, res) => res.json(
   AGENTS.map(a => ({
