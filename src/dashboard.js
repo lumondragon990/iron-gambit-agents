@@ -102,6 +102,15 @@ border:1px solid var(--ln);padding:3px 8px;color:var(--smoke)}
 .fold:after{content:"";position:absolute;left:0;right:0;bottom:0;height:60px;
 background:linear-gradient(transparent,var(--ob))}
 .tiny{font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--smoke)}
+.crewgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(178px,1fr));gap:1px;
+background:var(--ln);border:1px solid var(--ln);margin-bottom:6px}
+.cw{background:var(--ob);padding:10px 11px}
+.cw b{display:block;font-weight:400;font-size:12.5px}
+.cw .w{font-family:var(--mono);font-size:9px;letter-spacing:.06em;margin-top:3px;color:var(--smoke)}
+.cw.ok  .w{color:var(--ok)}
+.cw.late{border-left:2px solid var(--bad)}
+.cw.late .w{color:var(--bad)}
+.cw.never .w{color:#7A736A}
 .empty{border:1px dashed var(--ln);padding:28px;text-align:center;color:var(--smoke);font-size:12.5px}
 .hero svg{width:74px;height:74px;color:var(--gold);flex:none}
 </style></head><body>
@@ -144,6 +153,7 @@ export function workPage() {
       <div class="err" id="gateErr"></div>
     </div>
     <div id="panel" style="display:none">
+      <div id="crew"></div>
       <div class="subtabs">
         <button id="t_leads"   class="on" data-tab="leads">Leads</button>
         <button id="t_content" data-tab="content">Content</button>
@@ -198,8 +208,40 @@ async function unlock(silent){
     document.getElementById('gate').style.display='none';
     document.getElementById('panel').style.display='block';
     RUNS=await (await fetch('/runs',{headers:h()})).json();
+    crew();
+    setInterval(crew, 60000);
     tab('leads');
   }catch(err){ e.textContent='Could not reach the service: '+err.message; entry='';drawDots(); }
+}
+
+/* Is each agent still firing on schedule? A weekly agent that has not run in
+   over eight days has missed its slot and wants looking at. */
+function overdueDays(sched){
+  if(!sched) return null;
+  var p=sched.split(' ');
+  if(p.length<5) return null;
+  if(p[4]!=='*') return 8;              // weekly
+  if(p[2]!=='*') return 33;             // monthly
+  return 2;                             // daily-ish
+}
+async function crew(){
+  var el=document.getElementById('crew'); if(!el) return;
+  try{
+    var s=await (await fetch('/state',{headers:h()})).json();
+    el.innerHTML='<div class="h" style="margin:6px 0 10px">Crew</div><div class="crewgrid">'+
+      s.agents.map(function(a){
+        var lim=overdueDays(a.schedule), d=a.minutes_since==null?null:a.minutes_since/1440;
+        var cls = a.last_run==null ? 'never' : (lim!=null && d>lim ? 'late' : 'ok');
+        var when = a.last_run==null ? (a.schedule?'never run':'on demand')
+                 : (a.minutes_since<60 ? a.minutes_since+'m ago'
+                 : a.minutes_since<1440 ? Math.round(a.minutes_since/60)+'h ago'
+                 : Math.round(a.minutes_since/1440)+'d ago');
+        if(cls==='late') when='OVERDUE — '+when;
+        return '<div class="cw '+cls+'"><b>'+esc(a.person)+'</b>'+
+               '<span class="w">'+when+'</span>'+
+               '<span class="w" style="color:#57514A">'+(a.schedule||'manual')+'</span></div>';
+      }).join('')+'</div>';
+  }catch(e){}
 }
 
 function tab(t){
@@ -246,13 +288,100 @@ async function mark(id,st){
 }
 
 var CONTENT_AGENTS=['wick','vega','content','quinn','copy','ember'];
+
+/* ---- readable output -------------------------------------------------
+   Agents that return JSON get rendered as cards. Everything else gets
+   light markdown formatting. Raw JSON is unreadable and this page is for
+   reading. ------------------------------------------------------------ */
+var FENCE = String.fromCharCode(96,96,96);
+var RE_FENCE_HEAD = new RegExp('^' + FENCE + '(?:json|markdown)?\\s*', 'i');
+var RE_FENCE_TAIL = new RegExp(FENCE + '\\s*$');
+function stripNoise(t){
+  return String(t||'')
+    .replace(/<cite[^>]*>/gi,'').replace(/<[/]cite>/gi,'')
+    .replace(RE_FENCE_HEAD,'').replace(RE_FENCE_TAIL,'')
+    .trim();
+}
+function linkify(t){
+  return t.replace(/(https?:[/][/][^ <>"')]+)/g, function(u){
+    var label = u.replace(/^https?:[/][/](www[.])?/,'').slice(0,52);
+    return '<a href="'+u+'" target="_blank" rel="noopener" style="color:#D8B678">'+esc(label)+'</a>';
+  });
+}
+function fmtDate(d){
+  if(!d) return null;
+  var x=new Date(d); if(isNaN(x)) return d;
+  return x.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+}
+function scoreColor(n){ return n>=8?'#6FBF73':n>=6?'#FFB55C':'#8B8078'; }
+
+function eventCards(arr){
+  return arr.map(function(e){
+    var bits=[];
+    if(e.venue)      bits.push(esc(e.venue));
+    if(e.event_date) bits.push(fmtDate(e.event_date));
+    if(e.cost)       bits.push(esc(e.cost));
+    var dl = e.deadline ? Math.round((new Date(e.deadline)-Date.now())/86400000) : null;
+    return '<div class="lead" style="border-left-color:'+scoreColor(e.fit_score)+'">'+
+      '<div class="row"><div class="fit" style="color:'+scoreColor(e.fit_score)+'">'+(e.fit_score||'?')+'</div>'+
+      '<div class="grow"><div class="name">'+esc(e.name||'Untitled')+'</div>'+
+      (bits.length?'<div class="meta">'+bits.join('  ·  ')+'</div>':'')+
+      (e.why?'<div style="font-size:12.5px;color:#A79E93;margin-top:7px;line-height:1.6">'+linkify(esc(e.why))+'</div>':'')+
+      '<div class="row" style="margin-top:9px;gap:6px">'+
+        (e.apply_url?'<a class="pill" style="color:#D8B678;border-color:#9C7C43" target="_blank" rel="noopener" href="'+esc(e.apply_url)+'">Open link</a>':'<span class="pill">no link</span>')+
+        (dl!=null&&dl<=14?'<span class="pill hot">apply within '+dl+' days</span>':'')+
+      '</div></div></div></div>';
+  }).join('');
+}
+function outreachCards(arr){
+  return arr.map(function(o){
+    return '<div class="lead">'+
+      '<div class="name">'+esc(o.to_name||'Unknown')+' <span class="meta" style="display:inline">'+esc(o.handle||'')+'</span></div>'+
+      '<div class="meta">'+esc(o.platform||'')+(o.followers?('  ·  '+o.followers+' followers'):'')+
+        '  ·  '+(o.to_email?esc(o.to_email):'DM only')+'</div>'+
+      (o.why?'<div style="font-size:12.5px;color:#A79E93;margin-top:6px">'+esc(o.why)+'</div>':'')+
+      '<pre style="margin-top:9px">'+(o.subject?esc('Subject: '+o.subject)+String.fromCharCode(10,10):'')+esc(o.body||'')+'</pre>'+
+    '</div>';
+  }).join('');
+}
+function prose(t){
+  var NL=String.fromCharCode(10);
+  return esc(t).split(NL).map(function(l){
+    var s=l.trim();
+    if(!s) return '<div style="height:9px"></div>';
+    if(/^#{1,6}\s/.test(s))
+      return '<div style="font-family:var(--serif);font-size:17px;color:var(--hi);margin:14px 0 4px;letter-spacing:.04em">'+
+             s.replace(/^#{1,6}\s*/,'')+'</div>';
+    if(/^[-*•]\s/.test(s))
+      return '<div style="padding-left:16px;text-indent:-11px;margin:3px 0">— '+linkify(s.replace(/^[-*•]\s*/,''))+'</div>';
+    if(/^\d+[.)]\s/.test(s))
+      return '<div style="padding-left:18px;text-indent:-18px;margin:3px 0">'+linkify(s)+'</div>';
+    if(/^[A-Z][A-Z .-]{3,}:?$/.test(s))
+      return '<div style="font-family:var(--mono);font-size:10px;letter-spacing:.2em;color:var(--gold);margin:14px 0 4px">'+s+'</div>';
+    return '<div style="margin:3px 0">'+linkify(s)+'</div>';
+  }).join('').replace(/\*\*(.+?)\*\*/g,'<b style="font-weight:500;color:var(--cream)">$1</b>');
+}
+function renderOutput(raw){
+  var t=stripNoise(raw);
+  if(!t) return '<div class="meta">(empty)</div>';
+  if(t.charAt(0)==='{'||t.charAt(0)==='['){
+    try{
+      var j=JSON.parse(t);
+      if(j.events   && j.events.length)   return eventCards(j.events);
+      if(j.outreach && j.outreach.length) return outreachCards(j.outreach);
+      return '<div style="font-size:12.5px;line-height:1.7">'+prose(JSON.stringify(j,null,2))+'</div>';
+    }catch(e){}
+  }
+  return '<div style="font-size:13px;line-height:1.7;color:#C9C2B8">'+prose(t)+'</div>';
+}
 function card(r,folded){
   var id='r'+r.id;
   return '<div class="out"><div class="row"><div class="grow">'+
     '<h3>'+esc(r.agent)+'</h3><div class="tiny">'+when(r.created_at||r.at)+'  ·  '+esc(r.trigger||'')+'</div></div>'+
     '<button data-act="copy" data-id="'+r.id+'">Copy</button>'+
     '<button data-act="toggle" data-id="'+id+'">Expand</button></div>'+
-    '<pre id="'+id+'" class="'+(folded?'fold':'')+'">'+esc(r.output||r.text||'')+'</pre></div>';
+    '<div id="'+id+'" class="'+(folded?'fold':'')+'" style="margin-top:12px">'+
+      renderOutput(r.output||r.text||'')+'</div></div>';
 }
 function toggle(id){ var e=document.getElementById(id); e.classList.toggle('fold'); }
 async function copyRun(id){
